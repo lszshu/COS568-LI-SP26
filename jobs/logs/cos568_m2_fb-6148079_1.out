@@ -1,0 +1,35 @@
+Host: della-i13n9
+Start: Fri Mar 27 06:48:08 PM EDT 2026
+Insert ratio: 0.900000
+Executing fb_100M_public_uint64, insert-ratio=0.900000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from ./data/fb_100M_public_uint64 in 437 ms (228.833 M values/s)
+read 2000000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 32 ms (62.5 M values/s)
+read 98200000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 880 ms (111.591 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,9868808,7365283,5267543index size,12656662928Throughput: ,2.09802,1.89121,1.89881
+Executing fb_100M_public_uint64, insert-ratio=0.900000, index=DynamicPGM
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from ./data/fb_100M_public_uint64 in 439 ms (227.79 M values/s)
+read 2000000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 37 ms (54.0541 M values/s)
+read 98200000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 996 ms (98.5944 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: DynamicPGM,4181958,4133431,4094225index size,1700494188Throughput: ,2.71152,2.76488,2.79116Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: DynamicPGM,4719018,4721915,4759225index size,1705154448Throughput: ,2.82671,2.85088,2.84094Variant: ,BinarySearchVariant: ,64
+Variable rsum was: 0
+RESULT: DynamicPGM,4527351,4516272,4533075index size,1702518268Throughput: ,2.9006,2.96383,2.88074Variant: ,BinarySearchVariant: ,128
+Executing fb_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from ./data/fb_100M_public_uint64 in 526 ms (190.114 M values/s)
+read 2000000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 32 ms (62.5 M values/s)
+read 98200000 values from ./data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 1209 ms (81.2242 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPP,9881103,7440066,5204572index size,12650407672Throughput: ,1.8392,1.84913,1.91046Variant: ,naive-flushVariant: ,131072
+End: Fri Mar 27 06:50:49 PM EDT 2026

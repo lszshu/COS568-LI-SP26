@@ -1,0 +1,7 @@
+workload,index_name,avg_mixed_throughput_mops,index_size_bytes,search_method,value
+"Mixed (90% lookup, 10% insert)",DynamicPGM,0.912773,1702558388,BinarySearch,128.0
+"Mixed (90% lookup, 10% insert)",LIPP,17.035633333333333,12700946864,,
+"Mixed (90% lookup, 10% insert)",HybridPGMLIPP,1.331076666666667,12696383576,naive-flush,131072.0
+"Mixed (10% lookup, 90% insert)",DynamicPGM,2.9150566666666666,1702518268,BinarySearch,128.0
+"Mixed (10% lookup, 90% insert)",LIPP,1.96268,12656662928,,
+"Mixed (10% lookup, 90% insert)",HybridPGMLIPP,1.8662633333333332,12650407672,naive-flush,131072.0
