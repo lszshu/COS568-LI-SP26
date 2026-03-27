@@ -16,5 +16,5 @@ benchmark_results_*
 fb*.csv
 results/
 
-analysis_results/
+# analysis_results/
 *.png
