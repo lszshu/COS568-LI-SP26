@@ -1,0 +1,106 @@
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 349 ms (286.533 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 27 ms (74.0741 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 712 ms (137.921 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,8328205,6482629,4352256index size,11753613200Throughput: ,2.57896,2.44291,2.38827
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=DynamicPGM
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 344 ms (290.698 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 26 ms (76.9231 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 695 ms (141.295 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: DynamicPGM,2681841,2628347,2606247index size,1703241188Throughput: ,3.58505,3.7852,3.63055Variant: ,LinearSearchVariant: ,32
+Variable rsum was: 0
+RESULT: DynamicPGM,2129739,2126492,2112119index size,1700049408Throughput: ,3.10797,3.29382,3.10601Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: DynamicPGM,2144186,2068834,2062302index size,1700011168Throughput: ,3.18195,3.2654,3.18409Variant: ,InterpolationSearchVariant: ,256
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPPInsertTunedSpecialized
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 350 ms (285.714 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 24 ms (83.3333 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 714 ms (137.535 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,8085276,6223974,3724441index size,11686069032Throughput: ,4.66678,4.49035,4.46064Variant: ,BinarySearchVariant: ,64
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3780378,3745139,3786845index size,11686067432Throughput: ,4.35399,4.50083,4.29762Variant: ,BinarySearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3744568,3699138,3771817index size,11686067012Throughput: ,4.25874,4.26749,4.36679Variant: ,BinarySearchVariant: ,256
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3756858,3707380,3827325index size,11686066852Throughput: ,4.37317,4.31232,4.44668Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3751680,3694716,3749329index size,11686066792Throughput: ,4.36861,4.44142,4.26763Variant: ,BinarySearchVariant: ,1024
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3753236,3703665,3771626index size,11686066792Throughput: ,4.35487,4.35439,4.30888Variant: ,BinarySearchVariant: ,2048
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3680652,3755127,3754251index size,11686069032Throughput: ,4.15785,4.35664,4.24959Variant: ,InterpolationSearchVariant: ,64
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3695875,3697276,3848859index size,11686067432Throughput: ,4.28743,4.46312,4.09544Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3848464,3699558,3739640index size,11686067012Throughput: ,4.311,4.73265,4.79217Variant: ,InterpolationSearchVariant: ,256
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3661372,3668700,3672593index size,11686066852Throughput: ,4.76933,4.63139,4.77858Variant: ,InterpolationSearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3705099,3727482,3681294index size,11686066792Throughput: ,4.7926,4.65518,4.5374Variant: ,InterpolationSearchVariant: ,1024
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3651952,3746752,3706627index size,11686066792Throughput: ,4.57549,4.76003,4.57401Variant: ,InterpolationSearchVariant: ,2048
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3604431,3687639,3694526index size,11686075312Throughput: ,4.82542,4.7903,4.8131Variant: ,LinearSearchVariant: ,32
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3626914,3654991,3690555index size,11686069032Throughput: ,4.77043,4.76792,4.87082Variant: ,LinearSearchVariant: ,64
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPPLookupShardedSpecialized6
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 341 ms (293.255 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 25 ms (80 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 704 ms (139.489 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,8059524,6163658,3678935index size,11686092272Throughput: ,6.96162,6.32528,6.72305Variant: ,lookup-no-flush-sharded-specializedVariant: ,6Variant: ,BinarySearchVariant: ,128
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPPLookupShardedSpecialized8
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 384 ms (260.417 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 27 ms (74.0741 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 774 ms (126.873 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,8056495,6238566,3652014index size,11686158320Throughput: ,7.48997,7.11079,7.06224Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,BinarySearchVariant: ,128
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPPLookupShardedHighTunedSpecialized
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 424 ms (235.849 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 32 ms (62.5 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 855 ms (114.854 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,8120283,6235842,3717774index size,11686092272Throughput: ,6.96337,6.5153,6.71451Variant: ,lookup-no-flush-sharded-specializedVariant: ,6Variant: ,BinarySearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3742252,3721305,3633290index size,11686092272Throughput: ,6.35327,6.70462,6.55918Variant: ,lookup-no-flush-sharded-specializedVariant: ,6Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3733187,3701061,3693075index size,11686092272Throughput: ,6.59969,6.51093,6.40181Variant: ,lookup-no-flush-sharded-specializedVariant: ,6Variant: ,BinarySearchVariant: ,1024
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3661469,3740646,3747145index size,11686092272Throughput: ,6.79936,6.33125,6.40113Variant: ,lookup-no-flush-sharded-specializedVariant: ,6Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3683245,3704332,3746543index size,11686158320Throughput: ,7.03047,6.81815,6.63979Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,BinarySearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3670296,3682685,3648357index size,11686158320Throughput: ,6.95489,6.98771,6.90709Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3593375,3640231,3670054index size,11686158320Throughput: ,7.30981,7.10294,7.16391Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,BinarySearchVariant: ,1024
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3631005,3632813,3738640index size,11686158320Throughput: ,7.10753,6.99203,6.84262Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,BinarySearchVariant: ,2048
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3631366,3736833,3661346index size,11686158320Throughput: ,7.26939,7.04165,7.16216Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3728895,3617634,3693439index size,11686158320Throughput: ,6.99792,7.02514,6.86432Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,InterpolationSearchVariant: ,256
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3765077,3722140,3660572index size,11686158320Throughput: ,6.94101,7.08015,7.09361Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,InterpolationSearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,3654060,3653986,3713579index size,11686158320Throughput: ,7.23027,6.97049,7.1922Variant: ,lookup-no-flush-sharded-specializedVariant: ,8Variant: ,InterpolationSearchVariant: ,1024

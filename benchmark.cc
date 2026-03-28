@@ -86,16 +86,40 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool pareto,
              benchmark_64_hybrid_pgm_lipp_lookup_specialized_6(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized4",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_4(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized2",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_2(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized3",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_3(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized6",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_6(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized8",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_8(benchmark));
+  check_only("HybridPGMLIPPLookupShardedTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupShardedHighTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_high_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSharded64TunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_64_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPEpochRingSpecialized",
+             benchmark_64_hybrid_pgm_lipp_epoch_ring_specialized(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized32768",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_32768(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized65536",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_65536(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized131072",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_131072(benchmark));
+  check_only("HybridPGMLIPPLookupOneShotDeltaLippSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_oneshot_delta_lipp_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSortedDrainSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sorted_drain_specialized(benchmark));
+  check_only("HybridPGMLIPPLazyWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lazy_write_through_specialized(benchmark));
+  check_only("HybridPGMLIPPSentinelMarkerSpecialized",
+             benchmark_64_hybrid_pgm_lipp_sentinel_marker_specialized(benchmark));
+  check_only("HybridPGMLIPPAutoSwitchSpecialized",
+             benchmark_64_hybrid_pgm_lipp_auto_switch_specialized(benchmark));
+  check_only("HybridPGMLIPPAutoSwitchWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_auto_switch_write_through_specialized(benchmark));
   check_only("HybridPGMLIPPWriteThroughSpecialized",
              benchmark_64_hybrid_pgm_lipp_write_through_specialized(benchmark));
 }
@@ -126,16 +150,40 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool only_mode,
              benchmark_64_hybrid_pgm_lipp_lookup_specialized_6(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized4",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_4(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized2",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_2(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized3",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_3(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized6",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_6(benchmark));
   check_only("HybridPGMLIPPLookupShardedSpecialized8",
              benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_8(benchmark));
+  check_only("HybridPGMLIPPLookupShardedTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupShardedHighTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_high_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSharded64TunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_64_tuned_specialized(benchmark));
+  check_only("HybridPGMLIPPEpochRingSpecialized",
+             benchmark_64_hybrid_pgm_lipp_epoch_ring_specialized(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized32768",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_32768(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized65536",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_65536(benchmark));
   check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized131072",
              benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_131072(benchmark));
+  check_only("HybridPGMLIPPLookupOneShotDeltaLippSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_oneshot_delta_lipp_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSortedDrainSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lookup_sorted_drain_specialized(benchmark));
+  check_only("HybridPGMLIPPLazyWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_lazy_write_through_specialized(benchmark));
+  check_only("HybridPGMLIPPSentinelMarkerSpecialized",
+             benchmark_64_hybrid_pgm_lipp_sentinel_marker_specialized(benchmark));
+  check_only("HybridPGMLIPPAutoSwitchSpecialized",
+             benchmark_64_hybrid_pgm_lipp_auto_switch_specialized(benchmark));
+  check_only("HybridPGMLIPPAutoSwitchWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_auto_switch_write_through_specialized(benchmark));
   check_only("HybridPGMLIPPWriteThroughSpecialized",
              benchmark_64_hybrid_pgm_lipp_write_through_specialized(benchmark));
 }

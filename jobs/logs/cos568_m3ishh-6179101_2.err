@@ -1,0 +1,1 @@
+scripts/run_benchmarks_milestone3_insert_sharded_high_tuned_specialized.sh: line 31: 3905628 Segmentation fault      (core dumped) "$BENCHMARK" "$DATA_FILE" "$OPS_FILE" --through --csv --only "$INDEX" -r 3

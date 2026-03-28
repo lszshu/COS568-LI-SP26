@@ -1524,3 +1524,894 @@ single-probe `LIPP` / write-through specialized baselines that I decided:
 - do **not** promote batch-delta-LIPP to a full Slurm run yet
 - wait for the already-submitted `6174035` sharded head-to-head before deciding
   whether the sharded line deserves more cluster time
+
+### Additional lookup-heavy local screening: one-shot delta-LIPP and sorted-drain
+
+After the earlier lookup-heavy runs converged, I still wanted to test whether a
+smaller, cleaner flushing design could recover most of `LIPP`'s lookup path
+while preserving a true `DPGM + LIPP` hybrid.
+
+I implemented two more strictly compliant experimental structures in
+`competitors/hybrid_pgm_lipp_specialized.h`:
+
+- `HybridPGMLIPPOneShotDeltaLippSpecialized`
+- `HybridPGMLIPPSortedDrainSpecialized`
+
+The first design uses:
+
+- one main `LIPP`
+- one active `DPGM`
+- one immutable `delta LIPP`
+
+and performs a **single** migration: once the active `DPGM` reaches a fixed
+threshold, the active contents are bulk-loaded into a small `delta LIPP`, the
+buffer is reset, and the rest of the workload continues with:
+
+- lookup main `LIPP`
+- then lookup `delta LIPP`
+- then lookup the new active `DPGM`
+
+This was meant to remove the repeated full rebuild overhead of the earlier
+batch-delta design.
+
+I added local smoke-test candidates:
+
+- thresholds `32768 / 65536 / 131072`
+- plus one `InterpolationSearch,256` variant at threshold `65536`
+
+On local `fb` lookup-heavy smoke, the outputs were:
+
+- `32768, BinarySearch, 128 -> 2.27058`
+- `65536, BinarySearch, 128 -> 2.22811`
+- `131072, BinarySearch, 128 -> 2.14459`
+- `65536, InterpolationSearch, 256 -> 2.30026`
+
+These were all far below the best lookup-heavy specialized line, so I did not
+promote this branch to Slurm.
+
+The second design, `HybridPGMLIPPSortedDrainSpecialized`, was a minimal rewrite
+of the incremental-flush idea using only:
+
+- main `LIPP`
+- active `DPGM`
+- flushing `DPGM`
+
+When the active buffer reached a threshold, it was swapped into a read-only
+flushing `DPGM`. Each subsequent foreground operation drained a small sorted
+batch from the flushing `DPGM` into the main `LIPP`. The goal was to test
+whether "sorted foreground drain" itself was valuable once all the earlier
+generic machinery had been removed.
+
+I screened:
+
+- `8192:8`
+- `8192:16`
+- `16384:16`
+- `16384:32`
+- `32768:32`
+
+Again on `fb` lookup-heavy local smoke, the first completed point was:
+
+- `8192:8 -> 0.806221`
+
+This was so far below every serious candidate that I stopped the local screen
+and did not spend cluster time on this line either.
+
+So the net result of this extra lookup-heavy iteration was:
+
+- `one-shot delta LIPP`: not competitive
+- `sorted-drain specialized`: not competitive
+- no new lookup-heavy branch justified a fresh Slurm array
+
+### Insert-heavy tuning sweep v2: larger `DPGM` error bounds
+
+Since the additional lookup-heavy structures failed very early in local
+screening, I shifted effort back to the insert-heavy branch, which was already
+the strongest compliant result in the project.
+
+The question here was simple: the previous tuned sweep stopped at `DPGM` error
+bound `512`, but the insert-heavy path is dominated by buffered insert cost, so
+there was still a plausible chance that larger `epsilon` values would improve
+throughput further.
+
+I therefore expanded
+`benchmark_64_hybrid_pgm_lipp_insert_tuned_specialized()` to include:
+
+- `BinarySearch, 1024`
+- `BinarySearch, 2048`
+- `InterpolationSearch, 1024`
+- `InterpolationSearch, 2048`
+- `LinearSearch, 64`
+
+Before launching a full rerun, I did a local smoke test on `books`
+insert-heavy (`0.900000i`). Even this noisy login-node run immediately showed a
+useful signal:
+
+- `BinarySearch, 64 -> 3.11155`
+- `BinarySearch, 128 -> 5.04054`
+- `BinarySearch, 256 -> 4.05684`
+- `BinarySearch, 512 -> 5.00427`
+
+The important part here is not the absolute login-node number, but that the
+best local point (`5.04054`) was already clearly above the best full Slurm
+result from `6176009` on `books` (`4.48763`). That was enough evidence to
+justify a new cluster sweep.
+
+I created a new isolated Slurm runner:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_tuned_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_tuned_specialized_v2_array.slurm`
+- job id: `6177181`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_tuned_specialized_v2/6177181`
+
+This new run was intentionally separated from the earlier `6176009` output
+tree, so a failed or inconclusive rerun would not disturb the existing
+best-known insert-heavy baseline.
+
+### Insert-heavy tuning sweep v2 results: `6177181`
+
+The `6177181` array completed successfully:
+
+- all three tasks finished with `COMPLETED`
+- all three `.err` logs were empty
+- the summary was written to:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_tuned_specialized_v2/6177181/analysis/milestone3_insert_tuned_summary.csv`
+
+The best variants chosen by the same analysis script were:
+
+- `fb`:
+  - best hybrid = `InterpolationSearch, 2048`
+  - hybrid throughput = `3.86528`
+  - best vanilla `DynamicPGM` = `2.80598`
+  - vanilla `LIPP` = `2.05439`
+- `books`:
+  - best hybrid = `InterpolationSearch, 1024`
+  - hybrid throughput = `4.09334`
+  - best vanilla `DynamicPGM` = `3.02726`
+  - vanilla `LIPP` = `2.72532`
+- `osmc`:
+  - best hybrid = `BinarySearch, 256`
+  - hybrid throughput = `3.59687`
+  - best vanilla `DynamicPGM` = `2.64783`
+  - vanilla `LIPP` = `1.63525`
+
+This means the new sweep still clearly beat both vanilla baselines on all three
+datasets in that session.
+
+However, the most important comparison for deciding whether the **newly added**
+parameters were actually useful is the **within-session** comparison between:
+
+- the original sweep set
+  - `BinarySearch: 64 / 128 / 256 / 512`
+  - `InterpolationSearch: 64 / 128 / 256 / 512`
+  - `LinearSearch: 32`
+- the newly added points
+  - `BinarySearch: 1024 / 2048`
+  - `InterpolationSearch: 1024 / 2048`
+  - `LinearSearch: 64`
+
+Within `6177181` itself, the new points did help on two datasets:
+
+- `fb`:
+  - best old-set variant = `InterpolationSearch, 256` at `3.78667`
+  - best new-set variant = `InterpolationSearch, 2048` at `3.86528`
+  - improvement = `+2.08%`
+- `books`:
+  - best old-set variant = `InterpolationSearch, 64` at `4.07644`
+  - best new-set variant = `InterpolationSearch, 1024` at `4.09334`
+  - improvement = `+0.41%`
+- `osmc`:
+  - best old-set variant = `BinarySearch, 256` at `3.59687`
+  - best new-set variant = `LinearSearch, 64` at `3.53227`
+  - change = `-1.80%`
+
+So the interpretation is:
+
+- larger `epsilon` values were genuinely helpful for `fb`
+- they were marginally helpful for `books`
+- they did not help `osmc`
+
+There is also a tempting **cross-session** comparison against the earlier
+`6176009` run, but that must be interpreted carefully. Across runs:
+
+- `fb`: `3.83986 -> 3.86528` (`+0.66%`)
+- `books`: `4.48763 -> 4.09334` (`-8.79%`)
+- `osmc`: `4.07861 -> 3.59687` (`-11.81%`)
+
+I do **not** treat those cross-run drops as pure algorithm regressions, because
+they mix together:
+
+- different Slurm nodes
+- different runtime noise
+- the fact that the hybrid and baselines were all rerun in a new session
+
+For that reason, the safer conclusion is:
+
+- keep the expanded `1024 / 2048` points in the search space
+- use them because they improved the best candidate on `fb` and `books`
+- do **not** claim that the entire v2 session globally supersedes `6176009`
+
+At this stage, the insert-heavy line is still strongest overall, but the new
+evidence says that the optimal `DPGM` buffer settings are dataset-sensitive
+rather than universally improved by simply increasing `epsilon`.
+
+### `possible_idea.md` ideas 1 / 3 / 8: local implementation screen
+
+After the insert-heavy tuning work, I switched to the explicitly documented
+follow-up ideas in `possible_idea.md`, starting with the recommended order:
+
+1. batched lazy write-through
+2. LIPP-side marker (sentinel)
+3. workload-detecting auto-switch
+
+I implemented all three in
+`competitors/hybrid_pgm_lipp_specialized.h` and wired them into benchmark-only
+entry points in:
+
+- `benchmark_64_hybrid_pgm_lipp_lazy_write_through_specialized()`
+- `benchmark_64_hybrid_pgm_lipp_sentinel_marker_specialized()`
+- `benchmark_64_hybrid_pgm_lipp_auto_switch_specialized()`
+- `benchmark_64_hybrid_pgm_lipp_auto_switch_write_through_specialized()`
+
+The corresponding new index classes were:
+
+- `HybridPGMLIPPLazyWriteThroughSpecialized`
+- `HybridPGMLIPPSentinelMarkerSpecialized`
+- `HybridPGMLIPPAutoSwitchSpecialized`
+- `HybridPGMLIPPAutoSwitchWriteThroughSpecialized`
+
+#### Idea 1: lazy batched write-through
+
+This class keeps the main `LIPP` plus a small active `DPGM` batch. Inserts go
+to the `DPGM`, and once the batch reaches a threshold, the whole batch is
+written into `LIPP` and the `DPGM` is cleared.
+
+I screened thresholds:
+
+- `64`
+- `256`
+- `1024`
+
+On local `fb` lookup-heavy smoke:
+
+- `batch=64 -> 1.57993`
+- `batch=256 -> 2.52770`
+- `batch=1024 -> 2.79673`
+
+This was far below the local write-through reference (`5.58885`), so I
+discarded Idea 1 immediately.
+
+#### Idea 3: LIPP-side sentinel marker
+
+The important correctness observation here is that the generated insert keys are
+not present in the bulk-loaded `LIPP`, so a marker insert does **not** require
+duplicate-key support. That makes the idea feasible.
+
+The implementation stores:
+
+- actual values in the `DPGM`
+- a sentinel payload (`UINT64_MAX`) in `LIPP`
+
+The lookup path becomes:
+
+1. probe `LIPP`
+2. if miss: return miss immediately
+3. if hit with normal payload: return directly
+4. if hit with sentinel: probe `DPGM` for the true payload
+
+So negative lookups no longer pay a second `DPGM` probe. This is the exact
+benefit the idea was targeting.
+
+I screened:
+
+- `BinarySearch, 128`
+- `InterpolationSearch, 256`
+- `BinarySearch, 256`
+
+On local `fb` lookup-heavy smoke:
+
+- `BinarySearch, 128 -> 3.46245`
+- `InterpolationSearch, 256 -> 3.47220`
+- `BinarySearch, 256 -> 3.67817`
+
+This was meaningfully better than the older no-flush true-hybrid branches, but
+still far below local write-through (`5.58885`) and far below local vanilla
+`LIPP` (`9.92931`). So Idea 3 was directionally correct, but not strong enough
+to justify immediate cluster promotion.
+
+#### Idea 8: workload-detecting auto-switch
+
+I tried two interpretations of the auto-switch idea.
+
+The first version,
+`HybridPGMLIPPAutoSwitchSpecialized`, switched between:
+
+- lookup-favored mode: lazy batched write-through behavior
+- insert-favored mode: no-flush buffered mode
+
+This version was not competitive because it inherited the weaknesses of Idea 1.
+
+Local `fb` smoke:
+
+- lookup-heavy:
+  - `1024,256,50 -> 2.43448`
+  - `4096,256,50 -> 3.30471`
+  - `2048,128,40 -> 3.68732`
+- insert-heavy:
+  - `1024,256,50 -> 4.57153`
+  - `4096,256,50 -> 4.65328`
+  - `2048,128,40 -> 4.35143`
+
+The second version,
+`HybridPGMLIPPAutoSwitchWriteThroughSpecialized`, was closer to the original
+idea statement. It switched between:
+
+- lookup-favored mode: immediate write-through into `LIPP`
+- insert-favored mode: no-flush buffered mode
+
+This looked more principled, but local smoke still did not beat the best
+specialized baselines:
+
+- lookup-heavy:
+  - `1024,50 -> 3.73287`
+  - `4096,50 -> 3.47808`
+  - `2048,40 -> 3.09541`
+- insert-heavy:
+  - `1024,50 -> 3.31382`
+  - `4096,50 -> 4.80317`
+  - `2048,40 -> 4.79235`
+
+Compared against same-session references on local `fb`:
+
+- lookup-heavy references:
+  - `LIPP = 9.92931`
+  - write-through specialized = `5.58885`
+- insert-heavy reference:
+  - best insert-tuned specialized was around `4.99846`
+
+So the outcome for ideas `1 / 3 / 8` was:
+
+- Idea 1: clearly not viable
+- Idea 3: technically correct and somewhat promising, but still materially below
+  the strongest lookup-heavy baseline
+- Idea 8: neither interpretation beat the best fixed specialized baselines
+
+At that point I moved on to the next low-effort candidate from
+`possible_idea.md`: sharded `DPGM` buffers for insert-heavy workloads.
+
+### `possible_idea.md` idea 6: sharded DPGM buffer revisited for insert-heavy
+
+Although the earlier sharded experiments were disappointing on lookup-heavy
+workloads, the idea was still plausible for insert-heavy mixed workloads, where
+the dominant cost is buffered insertion rather than extra negative probes.
+
+The key advantage in that regime is straightforward:
+
+- a single large `DPGM` pays insertion cost that grows with total mutable size
+- many smaller shard-local `DPGM`s can reduce the depth / search window within
+  each shard
+
+The good news was that the project already had the required structure:
+
+- `HybridPGMLIPPShardedLookupSpecialized<ShardBits>`
+
+Even though it was originally motivated by lookup-heavy experiments, the class
+is also a valid insert-heavy candidate:
+
+- bulk-loaded keys stay in the main `LIPP`
+- new inserts go to exactly one shard-local `DPGM`
+- point lookups probe main `LIPP` first, then only one shard
+
+I first screened the already-existing shard counts on local `fb` insert-heavy:
+
+- `16 shards` (`ShardBits=4`) -> `6.01415`
+- `64 shards` (`ShardBits=6`) -> `5.94368`
+- `256 shards` (`ShardBits=8`) -> `4.11039`
+
+This was immediately important because all three of these were compared against
+the same local `fb` insert-heavy no-flush insert-specialized smoke, where the
+best insert-tuned value was only about `4.99846`.
+
+So sharding did not just look "interesting"; on that local screen it was
+clearly stronger.
+
+I then added smaller shard counts:
+
+- `4 shards` (`ShardBits=2`)
+- `8 shards` (`ShardBits=3`)
+
+and reran local `fb` insert-heavy smoke:
+
+- `4 shards` -> `5.72515`
+- `8 shards` -> `6.33176`
+
+So the local ordering on `fb` became:
+
+- `8 shards` -> `6.33176`
+- `16 shards` -> `6.01415`
+- `64 shards` -> `5.94368`
+- `4 shards` -> `5.72515`
+- `256 shards` -> `4.11039`
+
+This was the strongest local improvement signal I had seen in quite a while.
+
+Because these were local smoke tests only, I did **not** treat the numbers as
+reportable results. But the margin over the existing insert-heavy branch was so
+large that it clearly justified a full isolated Slurm run.
+
+I therefore created:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_sharded_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_sharded_specialized_array.slurm`
+- job id:
+  `6178438`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_specialized/6178438`
+
+This run compares, on the insert-heavy mixed workload only:
+
+- `LIPP`
+- `DynamicPGM`
+- `HybridPGMLIPPInsertTunedSpecialized`
+- sharded hybrids with `4 / 8 / 16 / 64 / 256` shards
+
+and again writes into a fresh isolated run root so that even a failed experiment
+cannot contaminate the older Milestone 3 results.
+
+### `possible_idea.md` idea 7: epoch-ring `DPGM` buffer
+
+The next compliant idea worth trying was the ring-buffer design from
+`possible_idea.md`:
+
+- keep `LIPP` as the immutable main index
+- replace one growing mutable `DPGM` with several epoch-local `DPGM`s
+- once the active epoch reaches a fixed capacity, rotate to the next epoch
+- before reusing an old epoch slot, flush that old epoch into `LIPP`
+
+I implemented this as:
+
+- `HybridPGMLIPPEpochRingSpecialized<EpochCount, EpochCapacity>`
+
+The implementation stayed within the original project constraints:
+
+- only `LIPP` and `DPGM` were used
+- no hash tables, Bloom filters, or arrays-as-indexes were introduced beyond
+  simple metadata vectors needed to manage epoch-local `DPGM` instances
+
+For a first screen I used local `fb` insert-heavy smoke and tested:
+
+- `4 epochs x 262144 keys`
+- `8 epochs x 262144 keys`
+- `4 epochs x 524288 keys`
+- `8 epochs x 524288 keys`
+
+The best local numbers were:
+
+- `8 x 262144 -> 4.6078`
+- `4 x 524288 -> 4.78244`
+
+This was not good enough.
+
+In the same session, the current references were already stronger:
+
+- best insert-tuned no-flush hybrid:
+  about `4.96596`
+- earlier local `8-shard` no-flush screen:
+  about `6.33176`
+
+So idea 7 did not fail correctness, but it failed the "worth cluster time"
+test. The synchronized epoch rotation cost was still too visible, and even the
+largest capacities I screened did not overtake the simpler no-flush branches.
+
+I therefore kept the code for documentation but did **not** promote
+`HybridPGMLIPPEpochRingSpecialized` to a full isolated Slurm experiment.
+
+### `possible_idea.md` idea 5 in practice: tuning the strongest sharded branch
+
+Once idea 7 was screened out, the most pragmatic next step was not another new
+structure, but parameter tuning for the strongest structure already seen in
+local smoke:
+
+- `HybridPGMLIPPShardedLookupSpecialized<ShardBits=3>`
+
+Originally this class had fixed:
+
+- `BranchingBinarySearch`
+- `DPGM epsilon = 128`
+
+I generalized it so the same sharded design can sweep:
+
+- search method
+- `DPGM` error bound
+
+without changing the high-level data structure.
+
+The new benchmark wrapper is:
+
+- `benchmark_64_hybrid_pgm_lipp_lookup_sharded_tuned_specialized()`
+
+and it screens the following local candidates for the `8-shard` version:
+
+- `BinarySearch` with epsilon `64 / 128 / 256 / 512 / 1024`
+- `InterpolationSearch` with epsilon `128 / 256 / 512`
+
+I then reran local `fb` insert-heavy smoke. The results were materially better
+than the fixed-parameter sharded run and also clearly above the strongest
+insert-specialized no-flush baseline:
+
+- fixed insert-tuned reference:
+  best local point about `4.96596`
+- tuned sharded:
+  - `BinarySearch,64 -> 5.2337`
+  - `BinarySearch,128 -> 6.2038`
+  - `BinarySearch,256 -> 6.06974`
+  - `BinarySearch,512 -> 6.17305`
+  - `BinarySearch,1024 -> 6.26042`
+  - `InterpolationSearch,128 -> 6.39307`
+  - `InterpolationSearch,256 -> 6.17755`
+  - `InterpolationSearch,512 -> 6.23401`
+
+This local screen established two things:
+
+- the old sharded improvement signal was real, not a one-off artifact
+- the fixed `epsilon=128` version had not yet been tuned enough
+
+The current local best became:
+
+- `8 shards + InterpolationSearch + epsilon=128 -> 6.39307`
+
+which is roughly:
+
+- `+28.7%` over the best same-session insert-tuned no-flush point
+  (`4.96596`)
+
+That was strong enough to justify a new isolated Slurm run dedicated to the
+tuned sharded branch.
+
+I therefore added:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_sharded_tuned_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_sharded_tuned_specialized_array.slurm`
+- job id:
+  `6178776`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_tuned_specialized/6178776`
+
+This run compares, on the insert-heavy mixed workload only:
+
+- `LIPP`
+- `DynamicPGM`
+- `HybridPGMLIPPInsertTunedSpecialized`
+- fixed `8-shard` no-flush hybrid
+- tuned `8-shard` no-flush hybrid
+
+Again, the run root is isolated from the repository so even a regression cannot
+pollute the older Milestone 3 baseline outputs.
+
+### Real-node correction from `6178438`: higher shard counts were stronger
+
+While `6178776` was already running, the first completed outputs from
+`6178438` changed an important assumption.
+
+My original tuned-sharded follow-up had focused on `ShardBits=3` (`8` shards)
+because that was the best point in earlier local smoke. But the completed
+real-node results for `fb` and `books` showed a different ordering for the
+fixed-parameter sharded branch:
+
+- `fb` averages:
+  - `ShardBits=3 -> about 4.83`
+  - `ShardBits=4 -> about 5.04`
+  - `ShardBits=6 -> about 5.22`
+  - `ShardBits=8 -> about 5.56`
+- `books` averages:
+  - `ShardBits=3 -> about 4.94`
+  - `ShardBits=4 -> about 5.17`
+  - `ShardBits=6 -> about 5.55`
+  - `ShardBits=8 -> about 5.94`
+
+So the cluster results contradicted the earlier local ordering and suggested a
+more promising direction:
+
+- keep the sharded no-flush design
+- focus tuning effort on higher shard counts rather than on `8` shards
+
+### High-shard tuned follow-up: local screen before another full run
+
+To respond to the real-node signal quickly, I added another narrow benchmark
+screen:
+
+- `benchmark_64_hybrid_pgm_lipp_lookup_sharded_high_tuned_specialized()`
+
+This screen tests only the higher shard counts that looked strongest in
+`6178438`:
+
+- `ShardBits=6` (`64` shards)
+- `ShardBits=8` (`256` shards)
+
+and only with the parameter combinations that already looked plausible from the
+previous tuned-sharded local screen:
+
+- `BinarySearch` with epsilon `128 / 512 / 1024`
+- `InterpolationSearch` with epsilon `128`
+
+I then reran local `fb` insert-heavy smoke. These results were substantially
+better than both the earlier tuned `8-shard` run and the fixed higher-shard
+cluster results:
+
+- `64 shards, BinarySearch,128 -> 5.59905`
+- `64 shards, BinarySearch,512 -> 6.48683`
+- `64 shards, BinarySearch,1024 -> 6.56684`
+- `64 shards, InterpolationSearch,128 -> 6.93999`
+- `256 shards, BinarySearch,128 -> 7.29687`
+- `256 shards, BinarySearch,512 -> 6.9544`
+- `256 shards, BinarySearch,1024 -> 7.32534`
+- `256 shards, InterpolationSearch,128 -> 7.33473`
+
+The current local best therefore became:
+
+- `256 shards + InterpolationSearch + epsilon=128 -> 7.33473`
+
+This was materially above:
+
+- the earlier tuned `8-shard` local best (`6.39307`)
+- the fixed `256-shard` full-run `fb` result from `6178438` (`about 5.56`)
+
+That was strong enough to justify a second focused isolated run, this time for
+the higher-shard tuned branch only.
+
+I therefore added:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_sharded_high_tuned_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_sharded_high_tuned_specialized_array.slurm`
+- job id:
+  `6179101`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_high_tuned_specialized/6179101`
+
+This run compares, on the insert-heavy mixed workload only:
+
+- `LIPP`
+- `DynamicPGM`
+- `HybridPGMLIPPInsertTunedSpecialized`
+- fixed `64-shard` no-flush hybrid
+- fixed `256-shard` no-flush hybrid
+- tuned high-shard no-flush hybrid
+
+### Stability finding from `6178438`: `256` shards can crash on `osmc`
+
+Before the newer high-shard runs completed, `6178438` produced one more
+important result: the `osmc` task failed with exit code `139`.
+
+The log showed that the run progressed cleanly through:
+
+- `LIPP`
+- `DynamicPGM`
+- `HybridPGMLIPPInsertTunedSpecialized`
+- fixed sharded variants with `ShardBits=2 / 3 / 4 / 6`
+
+and then crashed while entering the final fixed `ShardBits=8` (`256-shard`)
+candidate.
+
+So the evidence from `6178438` is:
+
+- `256` shards looked very strong on `fb` and `books`
+- but the same structural direction is not obviously stable on `osmc`
+
+That meant I did **not** want to rely solely on `6179101`, because even if the
+throughput story was excellent, a repeated `osmc` crash would make it an
+awkward final result.
+
+### Safe fallback: dedicated `64-shard tuned` full run
+
+To avoid that failure mode, I added one more clean fallback run that keeps the
+same promising high-shard idea but removes the likely unstable `256-shard`
+points entirely.
+
+The dedicated benchmark wrapper is:
+
+- `benchmark_64_hybrid_pgm_lipp_lookup_sharded_64_tuned_specialized()`
+
+and it only sweeps:
+
+- `64 shards`
+- `BinarySearch` with epsilon `128 / 512 / 1024`
+- `InterpolationSearch` with epsilon `128`
+
+I then created:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_sharded_64_tuned_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_sharded_64_tuned_specialized_array.slurm`
+- job id:
+  `6179288`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_64_tuned_specialized/6179288`
+
+This run compares:
+
+- `LIPP`
+- `DynamicPGM`
+- `HybridPGMLIPPInsertTunedSpecialized`
+- fixed `64-shard` no-flush hybrid
+- tuned `64-shard` no-flush hybrid
+
+so even if the aggressive `256-shard` line fails again, I will still have a
+clean three-dataset result for the strongest high-shard configuration that has
+so far looked plausibly stable.
+
+### Final analysis of the three follow-up runs
+
+To make the comparison reproducible, I added a small robust analysis helper:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analysis_milestone3_insert_sharded.py`
+
+Unlike the older insert-tuned analysis script, this parser tolerates the
+variable-width result rows produced by the newer sharded hybrids.
+
+I used it to summarize:
+
+- `6178776`:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_tuned_specialized/6178776/analysis/milestone3_insert_sharded_summary.csv`
+- `6179101`:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_high_tuned_specialized/6179101/analysis/milestone3_insert_sharded_summary.csv`
+- `6179288`:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_sharded_64_tuned_specialized/6179288/analysis/milestone3_insert_sharded_summary.csv`
+
+#### `6178776`: tuned `8-shard` run, clean
+
+All three array tasks completed successfully.
+
+Best hybrid results:
+
+- `fb`:
+  `5.23223` (`lookup-no-flush-sharded-specialized:3:BinarySearch:512`)
+- `books`:
+  `5.29986` (`lookup-no-flush-sharded-specialized:3:BinarySearch:64`)
+- `osmc`:
+  `5.69732` (`lookup-no-flush-sharded-specialized:3:BinarySearch:128`)
+
+This was already a strong result:
+
+- it beat `LIPP` on all three datasets by `+2.62` to `+4.43` Mops/s
+- it beat the best vanilla `DynamicPGM` on all three datasets by `+2.28` to
+  `+2.47` Mops/s
+
+So the tuned sharded family clearly generalized beyond the earlier local smoke.
+
+#### `6179101`: higher-shard run, fastest but unstable
+
+This run gave the highest absolute insert-heavy numbers I saw on `fb` and
+`books`, but it was not clean.
+
+Best recorded hybrid results before failure:
+
+- `fb`:
+  `6.06256`
+- `books`:
+  `7.22100`
+- `osmc`:
+  partial best before crash `5.36820`
+
+However, the `osmc` array task failed again with exit code `139`, and the log
+shows the crash happened after the run had already completed the `64-shard`
+fixed point and had moved into the `256-shard` region. This is consistent with
+the earlier `6178438` failure signal:
+
+- `256` shards can be extremely fast on `fb/books`
+- but the same direction is not stable enough on `osmc`
+
+So I treat `6179101` as an important experimental upper bound, not as the final
+recommended Milestone 3 result.
+
+#### `6179288`: tuned `64-shard` run, clean and strongest stable result
+
+All three array tasks completed successfully, and all stderr logs were empty.
+
+This became the best **stable** insert-heavy result of the whole iteration
+sequence.
+
+Best hybrid results:
+
+- `fb`:
+  `5.86304`
+  (`lookup-no-flush-sharded-specialized:6:BinarySearch:512`)
+- `books`:
+  `5.75078`
+  (`lookup-no-flush-sharded-specialized:6:InterpolationSearch:128`)
+- `osmc`:
+  `5.82114`
+  (`lookup-no-flush-sharded-specialized:6:InterpolationSearch:128`)
+
+Relative to the best vanilla baselines in the same run:
+
+- `fb`:
+  `+91.9%` over `DynamicPGM`, `+228.3%` over `LIPP`
+- `books`:
+  `+81.9%` over `DynamicPGM`, `+105.7%` over `LIPP`
+- `osmc`:
+  `+107.3%` over `DynamicPGM`, `+240.2%` over `LIPP`
+
+So the final practical conclusion is:
+
+- the strongest **absolute** insert-heavy family I found was the aggressive
+  high-shard line from `6179101`, but it remained unstable on `osmc`
+- the strongest **stable** insert-heavy result is `6179288`, i.e. the tuned
+  `64-shard` no-flush hybrid
+
+If I had to choose one insert-heavy Milestone 3 result to present as the final
+clean outcome, it would be `6179288`.
+
+### Final chosen method to report
+
+For the final Milestone 3 write-up, I would summarize the best method as the
+following **stable** hybrid design:
+
+- main index:
+  bulk-loaded `LIPP`
+- mutable component:
+  `64` shard-local `DynamicPGM` buffers
+- insert path:
+  hash / mix the key, insert into exactly one shard-local `DPGM`
+- lookup path:
+  probe `LIPP` first, then probe only the corresponding shard-local `DPGM`
+- flush policy:
+  none during the benchmark window
+
+Conceptually, this is a no-flush hybrid:
+
+- `LIPP` stores the large immutable base
+- sharded `DPGM`s absorb all new inserts
+- the sharding reduces mutable-buffer insert cost compared with a single large
+  `DPGM`
+- lookup remains correct because only one shard needs to be checked after the
+  `LIPP` miss
+
+In code terms, the winning family is:
+
+- `HybridPGMLIPPShardedLookupSpecialized<ShardBits=6, SearchClass, Epsilon>`
+
+with these best stable parameter choices from `6179288`:
+
+- `fb`:
+  `BinarySearch`, epsilon `512`
+- `books`:
+  `InterpolationSearch`, epsilon `128`
+- `osmc`:
+  `InterpolationSearch`, epsilon `128`
+
+If I need one single clean sentence for the report, it would be:
+
+> The best stable Milestone 3 method was a no-flush hybrid with a bulk-loaded
+> `LIPP` main index and `64` shard-local `DynamicPGM` write buffers; this
+> design consistently outperformed both vanilla `LIPP` and vanilla
+> `DynamicPGM` on the insert-heavy mixed workload.
+
+If I need one single practical recommendation for code/configuration rather than
+dataset-specific tuning, I would choose:
+
+- `64 shards + InterpolationSearch + epsilon=128`
+
+because:
+
+- it is the best stable setting on both `books` and `osmc`
+- it is still very strong on `fb`
+- it avoids the instability seen in the more aggressive `256-shard` line
+
+So the final answer is not "the fastest number ever seen in any experiment,"
+but rather:
+
+- the fastest **stable and clean** method:
+  tuned `64-shard` no-flush hybrid
+- the fastest **unstable** upper bound:
+  tuned `256-shard` no-flush hybrid, which I would mention only as an
+  experimental upper bound and not as the final submission result

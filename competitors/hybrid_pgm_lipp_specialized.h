@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -87,6 +88,486 @@ class HybridPGMLIPPInsertSpecialized : public Base<KeyType> {
 
   mutable LIPP<KeyType, uint64_t> lipp_;
   mutable BufferIndex active_buffer_;
+};
+
+template <class KeyType, std::size_t BatchThreshold,
+          class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPLazyWriteThroughSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPLazyWriteThroughSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    reset_batch();
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    return it != active_buffer_.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    auto buffer_it = active_buffer_.lower_bound(lower_key);
+    while (buffer_it != active_buffer_.end() && buffer_it->key() <= upper_key) {
+      result += buffer_it->value();
+      ++buffer_it;
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    track_active_min(data.key);
+    active_buffer_.insert(data.key, data.value);
+    ++active_count_;
+    if (active_count_ >= BatchThreshold) {
+      flush_batch_into_lipp();
+    }
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"lazy-write-through-specialized", std::to_string(BatchThreshold),
+            SearchClass::name(), std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const { return lipp_.index_size() + active_buffer_.size_in_bytes(); }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  void reset_batch() {
+    active_buffer_ = BufferIndex();
+    active_count_ = 0;
+    has_active_min_ = false;
+  }
+
+  void track_active_min(const KeyType& key) {
+    if (!has_active_min_ || key < active_min_key_) {
+      active_min_key_ = key;
+      has_active_min_ = true;
+    }
+  }
+
+  void flush_batch_into_lipp() {
+    if (!has_active_min_ || active_count_ == 0) {
+      reset_batch();
+      return;
+    }
+    auto it = active_buffer_.lower_bound(active_min_key_);
+    while (it != active_buffer_.end()) {
+      lipp_.insert(it->key(), it->value());
+      ++it;
+    }
+    reset_batch();
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+  std::size_t active_count_ = 0;
+  KeyType active_min_key_{};
+  bool has_active_min_ = false;
+};
+
+template <class KeyType, class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPSentinelMarkerSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPSentinelMarkerSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    active_buffer_ = BufferIndex();
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t value;
+    if (!lipp_.find(lookup_key, value)) {
+      return util::OVERFLOW;
+    }
+    if (value != kSentinelValue) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    return it != active_buffer_.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      if (lipp_it->comp.data.value != kSentinelValue) {
+        result += lipp_it->comp.data.value;
+      }
+      ++lipp_it;
+    }
+
+    auto buffer_it = active_buffer_.lower_bound(lower_key);
+    while (buffer_it != active_buffer_.end() && buffer_it->key() <= upper_key) {
+      result += buffer_it->value();
+      ++buffer_it;
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    lipp_.insert(data.key, kSentinelValue);
+    active_buffer_.insert(data.key, data.value);
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"sentinel-marker-specialized", SearchClass::name(),
+            std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const { return lipp_.index_size() + active_buffer_.size_in_bytes(); }
+
+ private:
+  static constexpr uint64_t kSentinelValue = std::numeric_limits<uint64_t>::max();
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+};
+
+template <class KeyType, std::size_t WindowSize, std::size_t BatchThreshold,
+          std::size_t InsertHeavyPercent = 50,
+          class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPAutoSwitchSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPAutoSwitchSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    reset_state();
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    record_lookup();
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    return it != active_buffer_.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    record_lookup();
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    auto buffer_it = active_buffer_.lower_bound(lower_key);
+    while (buffer_it != active_buffer_.end() && buffer_it->key() <= upper_key) {
+      result += buffer_it->value();
+      ++buffer_it;
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    record_insert();
+    track_active_min(data.key);
+    active_buffer_.insert(data.key, data.value);
+    ++active_count_;
+    if (lookup_favored_mode_ && active_count_ >= BatchThreshold) {
+      flush_all_active_into_lipp();
+    }
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"auto-switch-specialized", std::to_string(WindowSize),
+            std::to_string(BatchThreshold), std::to_string(InsertHeavyPercent),
+            SearchClass::name(), std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const { return lipp_.index_size() + active_buffer_.size_in_bytes(); }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  void reset_state() {
+    active_buffer_ = BufferIndex();
+    active_count_ = 0;
+    has_active_min_ = false;
+    window_ops_ = 0;
+    window_inserts_ = 0;
+    lookup_favored_mode_ = true;
+  }
+
+  void track_active_min(const KeyType& key) {
+    if (!has_active_min_ || key < active_min_key_) {
+      active_min_key_ = key;
+      has_active_min_ = true;
+    }
+  }
+
+  void flush_all_active_into_lipp() const {
+    if (!has_active_min_ || active_count_ == 0) {
+      return;
+    }
+    auto it = active_buffer_.lower_bound(active_min_key_);
+    while (it != active_buffer_.end()) {
+      lipp_.insert(it->key(), it->value());
+      ++it;
+    }
+    active_buffer_ = BufferIndex();
+    active_count_ = 0;
+    has_active_min_ = false;
+  }
+
+  void evaluate_window() const {
+    if (window_ops_ < WindowSize) {
+      return;
+    }
+    bool next_lookup_favored = window_inserts_ * 100 < window_ops_ * InsertHeavyPercent;
+    if (next_lookup_favored && !lookup_favored_mode_) {
+      flush_all_active_into_lipp();
+    }
+    lookup_favored_mode_ = next_lookup_favored;
+    window_ops_ = 0;
+    window_inserts_ = 0;
+  }
+
+  void record_lookup() const {
+    ++window_ops_;
+    evaluate_window();
+  }
+
+  void record_insert() const {
+    ++window_ops_;
+    ++window_inserts_;
+    evaluate_window();
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+  mutable std::size_t active_count_ = 0;
+  mutable std::size_t window_ops_ = 0;
+  mutable std::size_t window_inserts_ = 0;
+  mutable KeyType active_min_key_{};
+  mutable bool has_active_min_ = false;
+  mutable bool lookup_favored_mode_ = true;
+};
+
+template <class KeyType, std::size_t WindowSize, std::size_t InsertHeavyPercent = 50,
+          class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPAutoSwitchWriteThroughSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPAutoSwitchWriteThroughSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    reset_state();
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    record_lookup();
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    return it != active_buffer_.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    record_lookup();
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    auto buffer_it = active_buffer_.lower_bound(lower_key);
+    while (buffer_it != active_buffer_.end() && buffer_it->key() <= upper_key) {
+      result += buffer_it->value();
+      ++buffer_it;
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    record_insert();
+    if (lookup_favored_mode_) {
+      lipp_.insert(data.key, data.value);
+      return;
+    }
+    track_active_min(data.key);
+    active_buffer_.insert(data.key, data.value);
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"auto-switch-write-through-specialized", std::to_string(WindowSize),
+            std::to_string(InsertHeavyPercent), SearchClass::name(),
+            std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const { return lipp_.index_size() + active_buffer_.size_in_bytes(); }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  void reset_state() {
+    active_buffer_ = BufferIndex();
+    has_active_min_ = false;
+    window_ops_ = 0;
+    window_inserts_ = 0;
+    lookup_favored_mode_ = true;
+  }
+
+  void track_active_min(const KeyType& key) {
+    if (!has_active_min_ || key < active_min_key_) {
+      active_min_key_ = key;
+      has_active_min_ = true;
+    }
+  }
+
+  void flush_all_active_into_lipp() const {
+    if (!has_active_min_) {
+      return;
+    }
+    auto it = active_buffer_.lower_bound(active_min_key_);
+    while (it != active_buffer_.end()) {
+      lipp_.insert(it->key(), it->value());
+      ++it;
+    }
+    active_buffer_ = BufferIndex();
+    has_active_min_ = false;
+  }
+
+  void evaluate_window() const {
+    if (window_ops_ < WindowSize) {
+      return;
+    }
+    bool next_lookup_favored = window_inserts_ * 100 < window_ops_ * InsertHeavyPercent;
+    if (next_lookup_favored && !lookup_favored_mode_) {
+      flush_all_active_into_lipp();
+    }
+    lookup_favored_mode_ = next_lookup_favored;
+    window_ops_ = 0;
+    window_inserts_ = 0;
+  }
+
+  void record_lookup() const {
+    ++window_ops_;
+    evaluate_window();
+  }
+
+  void record_insert() const {
+    ++window_ops_;
+    ++window_inserts_;
+    evaluate_window();
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+  mutable std::size_t window_ops_ = 0;
+  mutable std::size_t window_inserts_ = 0;
+  mutable KeyType active_min_key_{};
+  mutable bool has_active_min_ = false;
+  mutable bool lookup_favored_mode_ = true;
 };
 
 template <class KeyType>
@@ -274,7 +755,9 @@ class HybridPGMLIPPLookupSpecialized : public Base<KeyType> {
   std::vector<std::unique_ptr<ShadowLIPP>> shadows_;
 };
 
-template <class KeyType, std::size_t ShardBits>
+template <class KeyType, std::size_t ShardBits,
+          class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
 class HybridPGMLIPPShardedLookupSpecialized : public Base<KeyType> {
  public:
   HybridPGMLIPPShardedLookupSpecialized(const std::vector<int>& params) { (void) params; }
@@ -337,7 +820,8 @@ class HybridPGMLIPPShardedLookupSpecialized : public Base<KeyType> {
   std::string name() const { return "HybridPGMLIPPSpecialized"; }
 
   std::vector<std::string> variants() const {
-    return {"lookup-no-flush-sharded-specialized", std::to_string(ShardBits)};
+    return {"lookup-no-flush-sharded-specialized", std::to_string(ShardBits),
+            SearchClass::name(), std::to_string(kDynamicPGMError)};
   }
 
   std::size_t size() const {
@@ -349,8 +833,7 @@ class HybridPGMLIPPShardedLookupSpecialized : public Base<KeyType> {
   }
 
  private:
-  static constexpr std::size_t kDynamicPGMError = 128;
-  using BufferSearch = BranchingBinarySearch<0>;
+  using BufferSearch = SearchClass;
   using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
   using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
 
@@ -367,6 +850,146 @@ class HybridPGMLIPPShardedLookupSpecialized : public Base<KeyType> {
 
   mutable LIPP<KeyType, uint64_t> lipp_;
   mutable std::vector<BufferIndex> shards_;
+};
+
+template <class KeyType, std::size_t EpochCount, std::size_t EpochCapacity,
+          class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPEpochRingSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPEpochRingSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    buffers_.clear();
+    buffers_.resize(EpochCount);
+    counts_.assign(EpochCount, 0);
+    min_keys_.assign(EpochCount, KeyType{});
+    has_min_.assign(EpochCount, false);
+    active_epoch_ = 0;
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    for (std::size_t offset = 0; offset < EpochCount; ++offset) {
+      auto idx = epoch_index(offset);
+      if (counts_[idx] == 0) {
+        continue;
+      }
+      const auto& buffer = buffers_[idx];
+      auto it = buffer.find(lookup_key);
+      if (it != buffer.end()) {
+        return it->value();
+      }
+    }
+    return util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key,
+                      uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    for (std::size_t idx = 0; idx < EpochCount; ++idx) {
+      if (counts_[idx] == 0) {
+        continue;
+      }
+      auto it = buffers_[idx].lower_bound(lower_key);
+      while (it != buffers_[idx].end() && it->key() <= upper_key) {
+        result += it->value();
+        ++it;
+      }
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    if (!has_min_[active_epoch_] || data.key < min_keys_[active_epoch_]) {
+      min_keys_[active_epoch_] = data.key;
+      has_min_[active_epoch_] = true;
+    }
+    buffers_[active_epoch_].insert(data.key, data.value);
+    ++counts_[active_epoch_];
+    if (counts_[active_epoch_] >= EpochCapacity) {
+      rotate_epoch();
+    }
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"epoch-ring-specialized", std::to_string(EpochCount),
+            std::to_string(EpochCapacity), SearchClass::name(),
+            std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const {
+    std::size_t total = lipp_.index_size();
+    for (const auto& buffer : buffers_) {
+      total += buffer.size_in_bytes();
+    }
+    return total;
+  }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  std::size_t epoch_index(std::size_t offset) const {
+    return (active_epoch_ + EpochCount - offset) % EpochCount;
+  }
+
+  void flush_epoch_into_lipp(std::size_t idx) {
+    if (counts_[idx] == 0 || !has_min_[idx]) {
+      return;
+    }
+    auto it = buffers_[idx].lower_bound(min_keys_[idx]);
+    while (it != buffers_[idx].end()) {
+      lipp_.insert(it->key(), it->value());
+      ++it;
+    }
+    buffers_[idx] = BufferIndex();
+    counts_[idx] = 0;
+    has_min_[idx] = false;
+  }
+
+  void rotate_epoch() {
+    auto next_epoch = (active_epoch_ + 1) % EpochCount;
+    flush_epoch_into_lipp(next_epoch);
+    active_epoch_ = next_epoch;
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable std::vector<BufferIndex> buffers_;
+  mutable std::vector<std::size_t> counts_;
+  mutable std::vector<KeyType> min_keys_;
+  mutable std::vector<bool> has_min_;
+  mutable std::size_t active_epoch_ = 0;
 };
 
 template <class KeyType, std::size_t RebuildThreshold>
@@ -521,4 +1144,330 @@ class HybridPGMLIPPBatchDeltaLippSpecialized : public Base<KeyType> {
   KeyType delta_min_key_{};
   bool has_active_min_ = false;
   bool has_delta_min_ = false;
+};
+
+template <class KeyType, std::size_t FreezeThreshold, class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPOneShotDeltaLippSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPOneShotDeltaLippSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    active_buffer_ = BufferIndex();
+    delta_lipp_.reset();
+    active_count_ = 0;
+    has_active_min_ = false;
+    delta_frozen_ = false;
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    if (delta_lipp_ && delta_lipp_->find(lookup_key, value)) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    return it != active_buffer_.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    if (delta_lipp_) {
+      auto delta_it = delta_lipp_->lower_bound(lower_key);
+      while (delta_it != delta_lipp_->end() && delta_it->comp.data.key <= upper_key) {
+        result += delta_it->comp.data.value;
+        ++delta_it;
+      }
+    }
+
+    auto active_it = active_buffer_.lower_bound(lower_key);
+    while (active_it != active_buffer_.end() && active_it->key() <= upper_key) {
+      result += active_it->value();
+      ++active_it;
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    if (!has_active_min_ || data.key < active_min_key_) {
+      active_min_key_ = data.key;
+      has_active_min_ = true;
+    }
+    active_buffer_.insert(data.key, data.value);
+    ++active_count_;
+    if (!delta_frozen_ && active_count_ >= FreezeThreshold) {
+      freeze_active_into_delta();
+    }
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"lookup-oneshot-delta-lipp-specialized", std::to_string(FreezeThreshold),
+            SearchClass::name(), std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const {
+    return lipp_.index_size() + (delta_lipp_ ? delta_lipp_->index_size() : 0) +
+           active_buffer_.size_in_bytes();
+  }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+  using DeltaLIPP = LIPP<KeyType, uint64_t>;
+
+  void freeze_active_into_delta() {
+    if (!has_active_min_ || active_count_ == 0) {
+      delta_frozen_ = true;
+      return;
+    }
+    std::vector<std::pair<KeyType, uint64_t>> entries;
+    entries.reserve(active_count_);
+    auto it = active_buffer_.lower_bound(active_min_key_);
+    while (it != active_buffer_.end()) {
+      entries.emplace_back(it->key(), it->value());
+      ++it;
+    }
+    if (!entries.empty()) {
+      auto next = std::make_unique<DeltaLIPP>();
+      next->bulk_load(entries.data(), entries.size());
+      delta_lipp_ = std::move(next);
+    }
+    active_buffer_ = BufferIndex();
+    active_count_ = 0;
+    has_active_min_ = false;
+    delta_frozen_ = true;
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+  std::unique_ptr<DeltaLIPP> delta_lipp_;
+  std::size_t active_count_ = 0;
+  KeyType active_min_key_{};
+  bool has_active_min_ = false;
+  bool delta_frozen_ = false;
+};
+
+template <class KeyType, std::size_t ActiveThreshold, std::size_t DrainBatch,
+          class SearchClass = BranchingBinarySearch<0>, std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPSortedDrainSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPSortedDrainSpecialized(const std::vector<int>& params) { (void) params; }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    reset_buffers();
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    (void) thread_id;
+    drain_step();
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    auto it = active_buffer_.find(lookup_key);
+    if (it != active_buffer_.end()) {
+      return it->value();
+    }
+    if (!flush_in_progress_) {
+      return util::OVERFLOW;
+    }
+    auto flushing_it = flushing_buffer_.find(lookup_key);
+    return flushing_it != flushing_buffer_.end() ? flushing_it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    (void) thread_id;
+    drain_step();
+    uint64_t result = 0;
+
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    auto active_it = active_buffer_.lower_bound(lower_key);
+    while (active_it != active_buffer_.end() && active_it->key() <= upper_key) {
+      result += active_it->value();
+      ++active_it;
+    }
+
+    if (flush_in_progress_) {
+      auto begin_key =
+          flush_resume_valid_ ? std::max(lower_key, flush_resume_key_) : lower_key;
+      auto flushing_it = flushing_buffer_.lower_bound(begin_key);
+      if (flush_resume_valid_ && flush_skip_equal_ && flushing_it != flushing_buffer_.end() &&
+          flushing_it->key() == flush_resume_key_) {
+        ++flushing_it;
+      }
+      while (flushing_it != flushing_buffer_.end() && flushing_it->key() <= upper_key) {
+        result += flushing_it->value();
+        ++flushing_it;
+      }
+    }
+
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    (void) thread_id;
+    drain_step();
+    track_active_min(data.key);
+    active_buffer_.insert(data.key, data.value);
+    ++active_count_;
+    maybe_start_flush();
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {"lookup-sorted-drain-specialized", std::to_string(ActiveThreshold),
+            std::to_string(DrainBatch), SearchClass::name(),
+            std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const {
+    return lipp_.index_size() + active_buffer_.size_in_bytes() + flushing_buffer_.size_in_bytes();
+  }
+
+ private:
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+  void reset_buffers() {
+    active_buffer_ = BufferIndex();
+    flushing_buffer_ = BufferIndex();
+    active_count_ = 0;
+    flushing_count_ = 0;
+    drained_count_ = 0;
+    has_active_min_ = false;
+    has_flushing_min_ = false;
+    flush_in_progress_ = false;
+    flush_resume_valid_ = false;
+    flush_skip_equal_ = false;
+  }
+
+  void track_active_min(const KeyType& key) {
+    if (!has_active_min_ || key < active_min_key_) {
+      active_min_key_ = key;
+      has_active_min_ = true;
+    }
+  }
+
+  void maybe_start_flush() {
+    if (flush_in_progress_ || active_count_ < ActiveThreshold) {
+      return;
+    }
+    flushing_buffer_ = std::move(active_buffer_);
+    flushing_count_ = active_count_;
+    drained_count_ = 0;
+    flushing_min_key_ = active_min_key_;
+    has_flushing_min_ = has_active_min_;
+    flush_in_progress_ = flushing_count_ > 0;
+    flush_resume_valid_ = false;
+    flush_skip_equal_ = false;
+    active_buffer_ = BufferIndex();
+    active_count_ = 0;
+    has_active_min_ = false;
+  }
+
+  void drain_step() const {
+    if (!flush_in_progress_) {
+      return;
+    }
+    auto it = flush_resume_valid_ ? flushing_buffer_.lower_bound(flush_resume_key_)
+                                  : flushing_buffer_.lower_bound(flushing_min_key_);
+    if (flush_resume_valid_ && flush_skip_equal_ && it != flushing_buffer_.end() &&
+        it->key() == flush_resume_key_) {
+      ++it;
+    }
+    if (it == flushing_buffer_.end()) {
+      flushing_buffer_ = BufferIndex();
+      flushing_count_ = 0;
+      drained_count_ = 0;
+      has_flushing_min_ = false;
+      flush_in_progress_ = false;
+      flush_resume_valid_ = false;
+      flush_skip_equal_ = false;
+      return;
+    }
+    std::size_t drained_now = 0;
+    while (drained_now < DrainBatch && it != flushing_buffer_.end()) {
+      lipp_.insert(it->key(), it->value());
+      flush_resume_key_ = it->key();
+      flush_resume_valid_ = true;
+      flush_skip_equal_ = true;
+      ++it;
+      ++drained_now;
+      ++drained_count_;
+    }
+    if (it == flushing_buffer_.end() || drained_count_ >= flushing_count_) {
+      flushing_buffer_ = BufferIndex();
+      flushing_count_ = 0;
+      drained_count_ = 0;
+      has_flushing_min_ = false;
+      flush_in_progress_ = false;
+      flush_resume_valid_ = false;
+      flush_skip_equal_ = false;
+    }
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable BufferIndex active_buffer_;
+  mutable BufferIndex flushing_buffer_;
+  mutable std::size_t active_count_ = 0;
+  mutable std::size_t flushing_count_ = 0;
+  mutable std::size_t drained_count_ = 0;
+  mutable KeyType active_min_key_{};
+  mutable KeyType flushing_min_key_{};
+  mutable KeyType flush_resume_key_{};
+  mutable bool has_active_min_ = false;
+  mutable bool has_flushing_min_ = false;
+  mutable bool flush_in_progress_ = false;
+  mutable bool flush_resume_valid_ = false;
+  mutable bool flush_skip_equal_ = false;
 };
