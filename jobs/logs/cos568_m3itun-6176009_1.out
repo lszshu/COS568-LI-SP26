@@ -1,0 +1,52 @@
+Host: della-r3c1n14
+Start: Sat Mar 28 14:09:56 EDT 2026
+Run root: /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_tuned_specialized/6176009
+Dataset: books_100M_public_uint64
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 429 ms (233.1 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 35 ms (57.1429 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 879 ms (111.718 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,9645575,7413802,5144883index size,11753613200Throughput: ,3.35731,3.03513,3.14832
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=DynamicPGM
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 417 ms (239.808 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 30 ms (66.6667 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 828 ms (118.599 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: DynamicPGM,3430071,3399104,3408604index size,1703241188Throughput: ,3.32163,3.41122,3.41329Variant: ,LinearSearchVariant: ,32
+Variable rsum was: 0
+RESULT: DynamicPGM,2663834,2659702,2678686index size,1700049408Throughput: ,3.38067,3.40072,3.39723Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: DynamicPGM,2595367,2594486,2596577index size,1700011168Throughput: ,3.23306,3.27332,3.27257Variant: ,InterpolationSearchVariant: ,256
+Executing dataset=books_100M_public_uint64, insert-ratio=0.900000, index=HybridPGMLIPPInsertTunedSpecialized
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64 in 390 ms (256.41 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix in 27 ms (74.0741 M values/s)
+read 98200000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/books_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.900000i_0m_mix_bulkload in 774 ms (126.873 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,9791931,7557889,5153757index size,11686069032Throughput: ,4.10361,4.25947,4.23544Variant: ,BinarySearchVariant: ,64
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5150029,5146607,5241426index size,11686067432Throughput: ,4.4233,4.46248,4.46341Variant: ,BinarySearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5150825,5140809,5150197index size,11686067012Throughput: ,4.24212,4.26242,4.26545Variant: ,BinarySearchVariant: ,256
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5148837,5180119,5218914index size,11686066852Throughput: ,4.43227,4.43891,4.46672Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5168188,5188088,5145551index size,11686069032Throughput: ,4.2048,4.22871,4.18574Variant: ,InterpolationSearchVariant: ,64
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5156472,5261962,5173167index size,11686067432Throughput: ,4.42546,4.38316,4.45815Variant: ,InterpolationSearchVariant: ,128
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5148127,5177955,5149625index size,11686067012Throughput: ,4.26139,4.29107,4.28677Variant: ,InterpolationSearchVariant: ,256
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5146301,5186322,5258524index size,11686066852Throughput: ,4.4843,4.46197,4.51663Variant: ,InterpolationSearchVariant: ,512
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,5166736,5156685,5147259index size,11686075312Throughput: ,4.2074,4.37988,4.38797Variant: ,LinearSearchVariant: ,32
+End: Sat Mar 28 14:18:08 EDT 2026

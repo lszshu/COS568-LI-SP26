@@ -15,7 +15,8 @@
 #include "base.h"
 #include "searches/branching_binary_search.h"
 
-template <class KeyType>
+template <class KeyType, class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
 class HybridPGMLIPPInsertSpecialized : public Base<KeyType> {
  public:
   HybridPGMLIPPInsertSpecialized(const std::vector<int>& params) { (void) params; }
@@ -73,13 +74,14 @@ class HybridPGMLIPPInsertSpecialized : public Base<KeyType> {
 
   std::string name() const { return "HybridPGMLIPPSpecialized"; }
 
-  std::vector<std::string> variants() const { return {"insert-no-flush-specialized", "lipp-first"}; }
+  std::vector<std::string> variants() const {
+    return {SearchClass::name(), std::to_string(kDynamicPGMError)};
+  }
 
   std::size_t size() const { return lipp_.index_size() + active_buffer_.size_in_bytes(); }
 
  private:
-  static constexpr std::size_t kDynamicPGMError = 128;
-  using BufferSearch = BranchingBinarySearch<0>;
+  using BufferSearch = SearchClass;
   using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
   using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
 

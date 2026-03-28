@@ -1347,7 +1347,7 @@ evaluation to fresh run roots under the same isolated Milestone 3 area.
 
 The direct-specialization resubmission `6175660` completed quickly and showed
 that direct specialization still does **not** robustly dominate vanilla
-`LIPP`:
+`LIPP`, but it was stronger than some earlier runs:
 
 - `fb` average:
   - `LIPP = 18.2452`
@@ -1355,9 +1355,13 @@ that direct specialization still does **not** robustly dominate vanilla
 - `books` average:
   - `LIPP = 23.1905`
   - direct specialized = `23.2113`
+- `osmc` average:
+  - `LIPP = 14.5813`
+  - direct specialized = `15.8391`
 
-So this branch remained effectively a tie with small dataset-dependent swings,
-not a stable across-the-board win.
+So this branch became a real improvement on `books` and `osmc`, but still fell
+slightly behind on `fb`. It remained a small dataset-dependent swing rather
+than a stable across-the-board win.
 
 The sharded true-hybrid resubmission `6175642` produced an even clearer result
 on the first two completed datasets:
@@ -1384,6 +1388,86 @@ At the time of this note, the final `osmc` rows from `6175642` were still being
 written, but the qualitative outcome was already clear enough that I stopped
 promoting the sharded line as a serious candidate for the final Milestone 3
 submission.
+
+### Insert-heavy tuning sweep: `6176009`
+
+After the lookup-heavy space largely converged, I shifted focus back to the
+insert-heavy side, where the hybrid was already stronger than both vanilla
+baselines and still had room to improve.
+
+The key observation was that the strongest insert-heavy specialized design,
+`HybridPGMLIPPInsertSpecialized`, is dominated by the behavior of its buffered
+`DPGM`. The lookup path is already close to optimal for insert-heavy mixed
+workloads:
+
+- check main `LIPP` first
+- only probe the buffer for inserted keys not yet in the resident index
+
+Because positive lookups to newly inserted keys are rare relative to the full
+key universe, most of the remaining optimization headroom comes from choosing a
+better `DPGM` search method / error bound pair for the insert buffer.
+
+So I turned `HybridPGMLIPPInsertSpecialized` into a parameterized template over:
+
+- `SearchClass`
+- `DPGM` error bound
+
+and added a dedicated benchmark sweep:
+
+- binary search with errors `64 / 128 / 256 / 512`
+- interpolation search with errors `64 / 128 / 256 / 512`
+- linear search with error `32`
+
+The dedicated runner was:
+
+- script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_insert_tuned_specialized.sh`
+- Slurm:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_insert_tuned_specialized_array.slurm`
+- analysis:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analysis_milestone3_insert_tuned.py`
+- job id: `6176009`
+- output root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_tuned_specialized/6176009`
+
+This run was fully successful. The summary was written to:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_insert_tuned_specialized/6176009/analysis/milestone3_insert_tuned_summary.csv`
+
+Best insert-heavy variants from `6176009`:
+
+- `fb`:
+  - best hybrid = `BinarySearch, 128`
+  - hybrid throughput = `3.83986`
+  - best vanilla `DynamicPGM` = `2.76782`
+  - vanilla `LIPP` = `2.05472`
+- `books`:
+  - best hybrid = `InterpolationSearch, 512`
+  - hybrid throughput = `4.48763`
+  - best vanilla `DynamicPGM` = `3.39287`
+  - vanilla `LIPP` = `3.18025`
+- `osmc`:
+  - best hybrid = `BinarySearch, 128`
+  - hybrid throughput = `4.07861`
+  - best vanilla `DynamicPGM` = `3.01686`
+  - vanilla `LIPP` = `1.66276`
+
+So this tuned insert-heavy specialization outperformed the best vanilla
+baseline by about:
+
+- `+38.7%` on `fb`
+- `+32.3%` on `books`
+- `+35.2%` on `osmc`
+
+It also improved over the earlier specialized insert-heavy head-to-head
+`6156824`:
+
+- `fb`: `3.65606 -> 3.83986` (`+5.0%`)
+- `books`: `4.00298 -> 4.48763` (`+12.1%`)
+- `osmc`: `3.31233 -> 4.07861` (`+23.1%`)
+
+This made the tuned insert-heavy branch the strongest result I obtained in the
+strictly compliant `DPGM + LIPP` design space.
 
 ### Batch-delta-LIPP local smoke only
 

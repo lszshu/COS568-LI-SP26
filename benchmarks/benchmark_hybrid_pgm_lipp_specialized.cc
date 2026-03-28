@@ -3,6 +3,8 @@
 #include "benchmark.h"
 #include "competitors/hybrid_pgm_lipp_direct_lipp_specialized.h"
 #include "competitors/hybrid_pgm_lipp_specialized.h"
+#include "searches/interpolation_search.h"
+#include "searches/linear_search.h"
 
 void benchmark_64_hybrid_pgm_lipp_specialized(tli::Benchmark<uint64_t>& benchmark,
                                               const std::string& filename) {
@@ -30,6 +32,27 @@ void benchmark_64_hybrid_pgm_lipp_specialized(tli::Benchmark<uint64_t>& benchmar
 
 void benchmark_64_hybrid_pgm_lipp_insert_specialized(tli::Benchmark<uint64_t>& benchmark) {
   benchmark.template Run<HybridPGMLIPPInsertSpecialized<uint64_t>>();
+}
+
+void benchmark_64_hybrid_pgm_lipp_insert_tuned_specialized(
+    tli::Benchmark<uint64_t>& benchmark) {
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, BranchingBinarySearch<0>, 64>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, BranchingBinarySearch<0>, 128>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, BranchingBinarySearch<0>, 256>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, BranchingBinarySearch<0>, 512>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, InterpolationSearch<0>, 64>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, InterpolationSearch<0>, 128>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, InterpolationSearch<0>, 256>>();
+  benchmark.template Run<
+      HybridPGMLIPPInsertSpecialized<uint64_t, InterpolationSearch<0>, 512>>();
+  benchmark.template Run<HybridPGMLIPPInsertSpecialized<uint64_t, LinearSearch<0>, 32>>();
 }
 
 void benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(tli::Benchmark<uint64_t>& benchmark) {

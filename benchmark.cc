@@ -78,6 +78,8 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool pareto,
              benchmark_64_hybrid_pgm_lipp_specialized(benchmark, filename));
   check_only("HybridPGMLIPPInsertSpecialized",
              benchmark_64_hybrid_pgm_lipp_insert_specialized(benchmark));
+  check_only("HybridPGMLIPPInsertTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_insert_tuned_specialized(benchmark));
   check_only("HybridPGMLIPPLookupSpecialized0",
              benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(benchmark));
   check_only("HybridPGMLIPPLookupSpecialized6",
@@ -116,6 +118,8 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool only_mode,
              benchmark_64_hybrid_pgm_lipp_specialized(benchmark, filename));
   check_only("HybridPGMLIPPInsertSpecialized",
              benchmark_64_hybrid_pgm_lipp_insert_specialized(benchmark));
+  check_only("HybridPGMLIPPInsertTunedSpecialized",
+             benchmark_64_hybrid_pgm_lipp_insert_tuned_specialized(benchmark));
   check_only("HybridPGMLIPPLookupSpecialized0",
              benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(benchmark));
   check_only("HybridPGMLIPPLookupSpecialized6",

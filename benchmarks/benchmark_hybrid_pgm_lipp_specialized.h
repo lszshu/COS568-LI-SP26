@@ -7,6 +7,9 @@ void benchmark_64_hybrid_pgm_lipp_specialized(tli::Benchmark<uint64_t>& benchmar
 
 void benchmark_64_hybrid_pgm_lipp_insert_specialized(tli::Benchmark<uint64_t>& benchmark);
 
+void benchmark_64_hybrid_pgm_lipp_insert_tuned_specialized(
+    tli::Benchmark<uint64_t>& benchmark);
+
 void benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(tli::Benchmark<uint64_t>& benchmark);
 
 void benchmark_64_hybrid_pgm_lipp_lookup_specialized_6(tli::Benchmark<uint64_t>& benchmark);
