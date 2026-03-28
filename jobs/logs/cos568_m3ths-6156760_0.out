@@ -1,0 +1,50 @@
+Host: della-r3c4n14
+Start: Sat Mar 28 01:48:50 EDT 2026
+Run root: /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_lookup_truehybrid_specialized/6156760
+Dataset: fb_100M_public_uint64
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 678 ms (147.493 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 36 ms (55.5556 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 1305 ms (76.4751 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,11042312,8239237,5771151index size,12700946864Throughput: ,16.9713,15.4379,14.9152
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPDirectLippSpecialized
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 675 ms (148.148 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 50 ms (40 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 1358 ms (73.4904 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPDirectLippSpecialized,10981616,8180664,5789364index size,12700946864Throughput: ,16.7757,15.3968,15.1289Variant: ,direct-main-lipp-specialized
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPWriteThroughSpecialized
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 883 ms (113.25 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 57 ms (35.0877 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 2047 ms (48.7543 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,11154958,8304874,5673157index size,12704347344Throughput: ,12.4016,12.2974,12.372Variant: ,lookup-write-through-specialized
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPLookupSpecialized0
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 942 ms (106.157 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 73 ms (27.3973 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 1754 ms (56.8985 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,10881322,8314262,8150338index size,12707132720Throughput: ,4.30954,3.96748,3.89019Variant: ,lookup-no-flush-specializedVariant: ,0
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPLookupSpecialized6
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 721 ms (138.696 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 45 ms (44.4444 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 1445 ms (69.0657 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPSpecialized,11011102,8358701,8239710index size,12703384224Throughput: ,4.47068,3.82332,3.97119Variant: ,lookup-no-flush-specializedVariant: ,6
+End: Sat Mar 28 01:53:26 EDT 2026

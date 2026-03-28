@@ -1,0 +1,52 @@
+Host: della-h17n7
+Start: Fri Mar 27 08:17:11 PM EDT 2026
+Run root: /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3/6149596
+Dataset: osmc_100M_public_uint64
+Insert ratio: 0.100000
+Executing dataset=osmc_100M_public_uint64, insert-ratio=0.100000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64 in 367 ms (272.48 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 32 ms (62.5 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 709 ms (140.762 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,14363893,15960584,6763377index size,20602887232Throughput: ,9.18003,12.0726,12.7689
+Executing dataset=osmc_100M_public_uint64, insert-ratio=0.100000, index=DynamicPGM
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64 in 427 ms (234.192 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 34 ms (58.8235 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 864 ms (115.509 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: DynamicPGM,3475656,3359496,3272580index size,1700920428Throughput: ,0.882373,1.05486,0.837864Variant: ,BinarySearchVariant: ,256
+Variable rsum was: 0
+RESULT: DynamicPGM,3712030,3479532,3492814index size,1703719788Throughput: ,0.949869,1.12271,0.91591Variant: ,BinarySearchVariant: ,64
+Variable rsum was: 0
+RESULT: DynamicPGM,3631527,3342546,3378385index size,1701834168Throughput: ,1.09192,1.08924,0.87705Variant: ,BinarySearchVariant: ,128
+Executing dataset=osmc_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64 in 402 ms (248.756 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 35 ms (57.1429 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 828 ms (120.531 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPP,14847904,9798377,7531380index size,20598151864Throughput: ,0.956666,1.1636,1.15246Variant: ,naive-flushVariant: ,131072
+Executing dataset=osmc_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPIncremental
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64 in 353 ms (283.286 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 27 ms (74.0741 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/osmc_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 766 ms (130.287 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,13468636,9208088,6430110index size,20601440640Throughput: ,1.98467,2.11517,1.81038Variant: ,hash-assisted-double-bufferedVariant: ,131072:4:0:1
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,5773035,6533218,7316957index size,20601440640Throughput: ,1.88799,1.47902,1.64189Variant: ,hash-assisted-double-bufferedVariant: ,131072:16:0:1
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,5863297,7709321,5613240index size,20596824824Throughput: ,1.50992,2.50549,2.76597Variant: ,hash-assisted-double-bufferedVariant: ,262144:8:0:1
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,6914990,5886389,8014219index size,20596824824Throughput: ,2.25171,2.18122,1.81804Variant: ,hash-assisted-double-bufferedVariant: ,262144:32:0:1
+End: Fri Mar 27 08:26:59 PM EDT 2026

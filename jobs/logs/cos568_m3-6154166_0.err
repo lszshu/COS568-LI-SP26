@@ -1,0 +1,3 @@
+/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_workload.sh: line 44: 2503056 Segmentation fault      (core dumped) "$BENCHMARK" "$DATA_FILE" "$OPS_FILE" --through --csv --only "$INDEX" -r 3
+srun: error: della-h17n11: task 0: Exited with exit code 139
+srun: Terminating StepId=6154170.0

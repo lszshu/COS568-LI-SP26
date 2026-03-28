@@ -1,0 +1,50 @@
+Host: della-h17n11
+Start: Fri Mar 27 23:33:28 EDT 2026
+Run root: /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3/6154166
+Dataset: fb_100M_public_uint64
+Insert ratio: 0.100000
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=LIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 420 ms (238.095 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 35 ms (57.1429 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 782 ms (127.621 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: LIPP,8276381,6700628,4452452index size,12700946864Throughput: ,17.5841,15.8487,14.6576
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=DynamicPGM
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 371 ms (269.542 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 28 ms (71.4286 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 738 ms (135.23 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: DynamicPGM,3090063,3227007,3128696index size,1700504528Throughput: ,0.922312,0.851949,0.890996Variant: ,BinarySearchVariant: ,512
+Variable rsum was: 0
+RESULT: DynamicPGM,3683118,3472954,3812749index size,1705226028Throughput: ,1.00255,0.988349,0.956235Variant: ,BinarySearchVariant: ,64
+Variable rsum was: 0
+RESULT: DynamicPGM,3395172,3658306,3379090index size,1702558388Throughput: ,0.9311,0.899034,0.951253Variant: ,BinarySearchVariant: ,128
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPP
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 368 ms (271.739 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 32 ms (62.5 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 729 ms (136.9 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPP,8718570,6415324,4634189index size,12696383576Throughput: ,1.16652,1.12148,1.15941Variant: ,naive-flushVariant: ,131072
+Executing dataset=fb_100M_public_uint64, insert-ratio=0.100000, index=HybridPGMLIPPIncremental
+Repeating lookup code 3 time(s).
+Using 1 thread(s).
+read 100000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64 in 352 ms (284.091 M values/s)
+read 2000000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix in 52 ms (38.4615 M values/s)
+read 99800000 values from /scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/data/fb_100M_public_uint64_ops_2M_0.000000rq_0.500000nl_0.100000i_0m_mix_bulkload in 712 ms (140.169 M values/s)
+Data is unique.
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,8887768,6598464,4322112index size,12700726440Throughput: ,1.24253,1.28782,1.21267Variant: ,double-buffered-compliantVariant: ,65536:64:32
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,4984054,5517404,4465281index size,12700726440Throughput: ,1.1997,1.05786,1.22852Variant: ,double-buffered-compliantVariant: ,65536:128:64
+Variable rsum was: 0
+RESULT: HybridPGMLIPPIncremental,4479043,4469015,5041297index size,12696383792Throughput: ,1.16031,1.18828,1.18873Variant: ,double-buffered-compliantVariant: ,131072:64:64
+Variable rsum was: 0

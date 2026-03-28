@@ -8,6 +8,9 @@
 #include "benchmarks/benchmark_dynamic_pgm.h"
 #include "benchmarks/benchmark_lipp.h"
 #include "benchmarks/benchmark_hybrid_pgm_lipp.h"
+#include "benchmarks/benchmark_hybrid_pgm_lipp_incremental.h"
+#include "benchmarks/benchmark_hybrid_pgm_lipp_direct_lipp_specialized.h"
+#include "benchmarks/benchmark_hybrid_pgm_lipp_specialized.h"
 
 #include "searches/linear_search.h"
 #include "searches/linear_search_avx.h"
@@ -59,7 +62,7 @@ using namespace std;
 template <class SearchClass, int record>
 void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool pareto,
                     const std::vector<int>& params, bool only_mode,
-                    const std::string& only, const std::string& /*filename*/) 
+                    const std::string& only, const std::string& filename) 
 {
   // Only run if user specifies --only=PGM or --only=BTree.
   check_only("PGM", benchmark_64_pgm<SearchClass>(benchmark, pareto, params));
@@ -67,6 +70,32 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool pareto,
   check_only("DynamicPGM", benchmark_64_dynamic_pgm<SearchClass>(benchmark, pareto, params));
   check_only("LIPP", benchmark_64_lipp(benchmark));
   check_only("HybridPGMLIPP", benchmark_64_hybrid_pgm_lipp(benchmark));
+  check_only("HybridPGMLIPPIncremental",
+             benchmark_64_hybrid_pgm_lipp_incremental_params(benchmark, params));
+  check_only("HybridPGMLIPPDirectLippSpecialized",
+             benchmark_64_hybrid_pgm_lipp_direct_lipp_specialized(benchmark));
+  check_only("HybridPGMLIPPSpecialized",
+             benchmark_64_hybrid_pgm_lipp_specialized(benchmark, filename));
+  check_only("HybridPGMLIPPInsertSpecialized",
+             benchmark_64_hybrid_pgm_lipp_insert_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSpecialized0",
+             benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(benchmark));
+  check_only("HybridPGMLIPPLookupSpecialized6",
+             benchmark_64_hybrid_pgm_lipp_lookup_specialized_6(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized4",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_4(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized6",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_6(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized8",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_8(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized32768",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_32768(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized65536",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_65536(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized131072",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_131072(benchmark));
+  check_only("HybridPGMLIPPWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_write_through_specialized(benchmark));
 }
 
 // 2) Overload that doesn't pass a search class
@@ -80,6 +109,31 @@ void execute_64_bit(tli::Benchmark<uint64_t>& benchmark, bool only_mode,
   check_only("DynamicPGM", benchmark_64_dynamic_pgm<record>(benchmark, filename));
   check_only("LIPP", benchmark_64_lipp(benchmark));
   check_only("HybridPGMLIPP", benchmark_64_hybrid_pgm_lipp(benchmark));
+  check_only("HybridPGMLIPPIncremental", benchmark_64_hybrid_pgm_lipp_incremental(benchmark, filename));
+  check_only("HybridPGMLIPPDirectLippSpecialized",
+             benchmark_64_hybrid_pgm_lipp_direct_lipp_specialized(benchmark));
+  check_only("HybridPGMLIPPSpecialized",
+             benchmark_64_hybrid_pgm_lipp_specialized(benchmark, filename));
+  check_only("HybridPGMLIPPInsertSpecialized",
+             benchmark_64_hybrid_pgm_lipp_insert_specialized(benchmark));
+  check_only("HybridPGMLIPPLookupSpecialized0",
+             benchmark_64_hybrid_pgm_lipp_lookup_specialized_0(benchmark));
+  check_only("HybridPGMLIPPLookupSpecialized6",
+             benchmark_64_hybrid_pgm_lipp_lookup_specialized_6(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized4",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_4(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized6",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_6(benchmark));
+  check_only("HybridPGMLIPPLookupShardedSpecialized8",
+             benchmark_64_hybrid_pgm_lipp_lookup_sharded_specialized_8(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized32768",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_32768(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized65536",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_65536(benchmark));
+  check_only("HybridPGMLIPPLookupBatchDeltaLippSpecialized131072",
+             benchmark_64_hybrid_pgm_lipp_lookup_batch_delta_lipp_specialized_131072(benchmark));
+  check_only("HybridPGMLIPPWriteThroughSpecialized",
+             benchmark_64_hybrid_pgm_lipp_write_through_specialized(benchmark));
 }
 
 // We don't do string benchmarks in this minimal build

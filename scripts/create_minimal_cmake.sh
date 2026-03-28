@@ -51,6 +51,7 @@ set(BENCH_SOURCES
     "benchmarks/benchmark_pgm.cc"
     "benchmarks/benchmark_lipp.cc"
     "benchmarks/benchmark_hybrid_pgm_lipp.cc"
+    "benchmarks/benchmark_hybrid_pgm_lipp_incremental.cc"
     "benchmarks/benchmark_btree.cc")
 
 file(GLOB_RECURSE SEARCH_SOURCES "searches/*.h" "searches/search.cpp")

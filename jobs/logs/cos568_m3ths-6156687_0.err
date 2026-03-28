@@ -1,0 +1,3 @@
+/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/run_benchmarks_milestone3_lookup_truehybrid_specialized.sh: line 36: ough: command not found
+srun: error: della-r3c4n9: task 0: Exited with exit code 127
+srun: Terminating StepId=6156699.0
