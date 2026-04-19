@@ -2903,3 +2903,95 @@ At this point the concurrent insert-heavy path has a clean reportable answer:
 - `fb`: `delta-dpgm-sbf:8:BinarySearch-e128:2048`
 - `books`: `delta-dpgm-sbf:8:BinarySearch-e128:2048`
 - `osmc`: `delta-dpgm-sbf:6:BinarySearch-e128:1024`
+
+### Finalists confirmation run: `7159527`
+
+To check whether the `7158956` winners were just a single clean best-case run,
+I reran the same finalists configuration without changing the candidate set:
+
+- job id: `7159527`
+- run root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert_finalists/7159527`
+
+This confirmation also completed cleanly on all three datasets:
+
+- `7159527_0` (`fb`) -> `COMPLETED`, `00:03:40`, `0:0`
+- `7159527_1` (`books`) -> `COMPLETED`, `00:04:11`, `0:0`
+- `7159527_2` (`osmc`) -> `COMPLETED`, `00:06:38`, `0:0`
+
+The winners under the same median-first analysis rule were:
+
+- `fb`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  at `45.8708` Mops/s average, `46.2400` median
+- `books`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:4096`
+  at `56.0978` Mops/s average, `56.2779` median
+- `osmc`:
+  `delta-dpgm-sbf:6:BinarySearch-e128:512`
+  at `30.6152` Mops/s average, `31.3250` median
+
+The important takeaway was not the exact winner shift, but the fact that:
+
+- the finalists set remained fully stable
+- `fb` / `osmc` still showed substantial run-to-run throughput drift
+
+So I launched one more narrow stability follow-up on only the unstable
+datasets.
+
+### Narrow stability follow-up: `7159729`
+
+To focus on the unstable cases without wasting queue time on `books`, I reran
+only `fb` and `osmc`:
+
+- job id: `7159729`
+- run root:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert_finalists/7159729`
+- array spec: `0,2`
+
+This run also completed cleanly:
+
+- `7159729_0` (`fb`) -> `COMPLETED`, `00:03:12`, `0:0`
+- `7159729_2` (`osmc`) -> `COMPLETED`, `00:06:41`, `0:0`
+
+Its winners were:
+
+- `fb`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  at `57.0996` Mops/s average, `57.3750` median
+- `osmc`:
+  `delta-dpgm-sbf:6:BinarySearch-e128:256`
+  at `31.0439` Mops/s average, `31.7666` median
+
+### Cross-run stable winner after three finalists runs
+
+At this point I had three clean finalists runs to compare:
+
+- `7158956`
+- `7159527`
+- `7159729` (`fb` / `osmc` only)
+
+So rather than selecting the best single run, I aggregated the raw CSV rows by
+dataset and variant across these confirmation jobs.
+
+The cross-run picture is:
+
+- `books`:
+  `8:BinarySearch-e128:2048` is the clearest stable winner
+  because it stayed strong in both completed runs, while `4096` swung from very
+  weak in `7158956` to strong in `7159527`
+- `fb`:
+  `8:BinarySearch-e128:1024` and `8:BinarySearch-e128:2048` are very close, but
+  `1024` won two of the three clean runs, so it is the better practical choice
+- `osmc`:
+  the threshold ordering still moves across runs, but `6` shards remain stable
+  and the `1024` variant retains the strongest best-case clean run
+
+So the final practical recommendation after the confirmation phase is:
+
+- `fb`: `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+- `books`: `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+- `osmc`: `delta-dpgm-sbf:6:BinarySearch-e128:1024`
+
+This is a stronger conclusion than the earlier single-run statement because it
+is now based on repeated clean Slurm executions, not on one lucky result.
