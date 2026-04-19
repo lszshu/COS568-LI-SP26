@@ -1,6 +1,7 @@
 #include "benchmarks/benchmark_hybrid_pgm_lipp_specialized.h"
 
 #include "benchmark.h"
+#include "competitors/hybrid_pgm_lipp_concurrent.h"
 #include "competitors/hybrid_pgm_lipp_direct_lipp_specialized.h"
 #include "competitors/hybrid_pgm_lipp_specialized.h"
 #include "searches/interpolation_search.h"
@@ -240,4 +241,49 @@ void benchmark_64_hybrid_pgm_lipp_auto_switch_write_through_specialized(
 
 void benchmark_64_hybrid_pgm_lipp_write_through_specialized(tli::Benchmark<uint64_t>& benchmark) {
   benchmark.template Run<HybridPGMLIPPWriteThroughSpecialized<uint64_t>>();
+}
+
+void benchmark_64_hybrid_pgm_lipp_workload_aware_specialized(
+    tli::Benchmark<uint64_t>& benchmark, const std::string& filename) {
+  if (filename.find("0.100000i") != std::string::npos) {
+    benchmark.template Run<HybridPGMLIPPWorkloadAwareSpecialized<uint64_t>>({0, 0});
+    return;
+  }
+
+  if (filename.find("0.900000i") != std::string::npos) {
+    const int shard_bits =
+        filename.find("osmc_100M_public_uint64") != std::string::npos ? 6 : 8;
+    benchmark.template Run<HybridPGMLIPPWorkloadAwareSpecialized<uint64_t>>({1, shard_bits});
+    return;
+  }
+
+  benchmark.template Run<HybridPGMLIPPWorkloadAwareSpecialized<uint64_t>>({0, 0});
+}
+
+void benchmark_64_hybrid_pgm_lipp_concurrent_workload_aware_specialized(
+    tli::Benchmark<uint64_t>& benchmark, const std::string& filename) {
+  if (filename.find("0.100000i") != std::string::npos) {
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({0, 4});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({0, 6});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({0, 8});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({2, 4});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({2, 6});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({2, 8});
+    return;
+  }
+
+  if (filename.find("0.900000i") != std::string::npos) {
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 4});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 5});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6});
+    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8});
+    return;
+  }
+
+  benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({0, 8});
+}
+
+void benchmark_64_hybrid_pgm_lipp_concurrent_workload_aware_specialized_params(
+    tli::Benchmark<uint64_t>& benchmark, const std::vector<int>& params) {
+  benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>(params);
 }

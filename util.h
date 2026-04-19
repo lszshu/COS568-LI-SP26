@@ -15,6 +15,9 @@
 #include <cstring>
 #include <immintrin.h>
 #include <atomic>
+#ifdef __linux__
+#include <sched.h>
+#endif
 
 //#define PRINT_ERRORS
 
@@ -162,19 +165,40 @@ template <>
   }
 }
 
-// Pins the current thread to core `core_id`.
-static void set_cpu_affinity(const uint32_t core_id) __attribute__((unused));
-static void set_cpu_affinity(const uint32_t core_id) {
+// Returns the CPUs currently available to this process under the active cpuset.
+static std::vector<uint32_t> allowed_cpu_ids() __attribute__((unused));
+static std::vector<uint32_t> allowed_cpu_ids() {
 #ifdef __linux__
   cpu_set_t mask;
   CPU_ZERO(&mask);
-  CPU_SET(core_id % std::thread::hardware_concurrency(), &mask);
-  const int result =
-      pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
-  if (result != 0) fail("failed to set CPU affinity");
+  if (sched_getaffinity(0, sizeof(mask), &mask) != 0) {
+    return {};
+  }
+
+  std::vector<uint32_t> cpu_ids;
+  cpu_ids.reserve(CPU_COUNT(&mask));
+  for (uint32_t cpu_id = 0; cpu_id < CPU_SETSIZE; ++cpu_id) {
+    if (CPU_ISSET(cpu_id, &mask)) {
+      cpu_ids.push_back(cpu_id);
+    }
+  }
+  return cpu_ids;
 #else
-  (void)core_id;
-  std::cout << "we only support thread pinning under Linux" << std::endl;
+  return {};
+#endif
+}
+
+// Pins the current thread to a CPU within the current cpuset.
+static bool set_cpu_affinity(const uint32_t cpu_id) __attribute__((unused));
+static bool set_cpu_affinity(const uint32_t cpu_id) {
+#ifdef __linux__
+  cpu_set_t mask;
+  CPU_ZERO(&mask);
+  CPU_SET(cpu_id, &mask);
+  return pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask) == 0;
+#else
+  (void)cpu_id;
+  return false;
 #endif
 }
 

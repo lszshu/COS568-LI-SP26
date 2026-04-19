@@ -72,13 +72,7 @@ static void* DoOpsCoreLoop(void* param) {
 
   boost::chrono::thread_clock::time_point thread_clock_start;
   std::chrono::high_resolution_clock::time_point hr_clock_start;
-  bool flag = false;
   for (size_t idx = start; idx < limit; ++idx) {
-    if (!util::running && !flag){
-      flag = true;
-      thread_param.op_cnt = idx - start;
-    }
-
     const uint8_t op = ops[idx].op;
     const KeyType lo_key = ops[idx].lo_key;
     const KeyType hi_key = ops[idx].hi_key;
@@ -158,10 +152,7 @@ static void* DoOpsCoreLoop(void* param) {
     if constexpr (fence) __sync_synchronize();
   }
 
-  if (!flag){
-    util::running = false;
-    thread_param.op_cnt = limit - start;
-  }
+  thread_param.op_cnt = limit - start;
   return nullptr;
 }
 
@@ -432,7 +423,9 @@ class Benchmark {
 
       uint64_t timing;
       if (num_threads_ > 1){
-        timing = index->runMultithread(DoOpsCoreLoop<true, KeyType, Index, time_each, fence, clear_cache, verify>, fg_params);
+        timing = index->runMultithread(
+            DoOpsCoreLoop<true, KeyType, Index, time_each, fence, clear_cache, verify>,
+            fg_params, num_threads_);
       }
       else{
         util::running = true;

@@ -14,6 +14,7 @@
 #include "./lipp/src/core/lipp.h"
 #include "PGM-index/include/pgm_index_dynamic.hpp"
 #include "base.h"
+#include "hybrid_pgm_lipp_direct_lipp_specialized.h"
 #include "searches/branching_binary_search.h"
 
 template <class KeyType, class SearchClass = BranchingBinarySearch<0>,
@@ -634,6 +635,144 @@ class HybridPGMLIPPWriteThroughSpecialized : public Base<KeyType> {
 
   mutable LIPP<KeyType, uint64_t> lipp_;
   mutable BufferIndex active_buffer_;
+};
+
+template <class KeyType, class SearchClass = BranchingBinarySearch<0>,
+          std::size_t kDynamicPGMError = 128>
+class HybridPGMLIPPWorkloadAwareSpecialized : public Base<KeyType> {
+ public:
+  HybridPGMLIPPWorkloadAwareSpecialized(const std::vector<int>& params) {
+    if (!params.empty() && params[0] != 0) {
+      mode_ = Mode::kInsertHeavySharded;
+    }
+    if (params.size() > 1 && params[1] > 0) {
+      shard_bits_ = static_cast<std::size_t>(params[1]);
+    }
+  }
+
+  uint64_t Build(const std::vector<KeyValue<KeyType>>& data, size_t num_threads) {
+    if (!insert_heavy_mode()) {
+      shards_.clear();
+      return direct_lipp_.Build(data, num_threads);
+    }
+
+    (void) num_threads;
+    std::vector<std::pair<KeyType, uint64_t>> loading_data;
+    loading_data.reserve(data.size());
+    for (const auto& item : data) {
+      loading_data.emplace_back(item.key, item.value);
+    }
+    shards_.clear();
+    shards_.resize(shard_count());
+    return util::timing([&] { lipp_.bulk_load(loading_data.data(), loading_data.size()); });
+  }
+
+  size_t EqualityLookup(const KeyType& lookup_key, uint32_t thread_id) const {
+    if (!insert_heavy_mode()) {
+      return direct_lipp_.EqualityLookup(lookup_key, thread_id);
+    }
+
+    (void) thread_id;
+    uint64_t value;
+    if (lipp_.find(lookup_key, value)) {
+      return value;
+    }
+    const auto& shard = shards_[bucket_index(lookup_key)];
+    auto it = shard.find(lookup_key);
+    return it != shard.end() ? it->value() : util::OVERFLOW;
+  }
+
+  uint64_t RangeQuery(const KeyType& lower_key, const KeyType& upper_key, uint32_t thread_id) const {
+    if (!insert_heavy_mode()) {
+      return direct_lipp_.RangeQuery(lower_key, upper_key, thread_id);
+    }
+
+    (void) thread_id;
+    uint64_t result = 0;
+    auto lipp_it = lipp_.lower_bound(lower_key);
+    while (lipp_it != lipp_.end() && lipp_it->comp.data.key <= upper_key) {
+      result += lipp_it->comp.data.value;
+      ++lipp_it;
+    }
+
+    for (const auto& shard : shards_) {
+      auto it = shard.lower_bound(lower_key);
+      while (it != shard.end() && it->key() <= upper_key) {
+        result += it->value();
+        ++it;
+      }
+    }
+    return result;
+  }
+
+  void Insert(const KeyValue<KeyType>& data, uint32_t thread_id) {
+    if (!insert_heavy_mode()) {
+      direct_lipp_.Insert(data, thread_id);
+      return;
+    }
+    (void) thread_id;
+    shards_[bucket_index(data.key)].insert(data.key, data.value);
+  }
+
+  bool applicable(bool unique, bool range_query, bool insert, bool multithread,
+                  const std::string& ops_filename) const {
+    (void) range_query;
+    (void) insert;
+    (void) ops_filename;
+    return unique && !multithread;
+  }
+
+  std::string name() const { return "HybridPGMLIPPWorkloadAwareSpecialized"; }
+
+  std::vector<std::string> variants() const {
+    return {insert_heavy_mode() ? "workload-aware-sharded" : "workload-aware-direct-lipp",
+            std::to_string(shard_bits_), SearchClass::name(),
+            std::to_string(kDynamicPGMError)};
+  }
+
+  std::size_t size() const {
+    if (!insert_heavy_mode()) {
+      return direct_lipp_.size();
+    }
+    std::size_t total = lipp_.index_size();
+    for (const auto& shard : shards_) {
+      total += shard.size_in_bytes();
+    }
+    return total;
+  }
+
+ private:
+  enum class Mode {
+    kLookupHeavyDirect,
+    kInsertHeavySharded,
+  };
+
+  using BufferSearch = SearchClass;
+  using BufferPGM = PGMIndex<KeyType, BufferSearch, kDynamicPGMError, 16>;
+  using BufferIndex = DynamicPGMIndex<KeyType, uint64_t, BufferSearch, BufferPGM>;
+
+  bool insert_heavy_mode() const { return mode_ == Mode::kInsertHeavySharded; }
+
+  std::size_t shard_count() const {
+    return shard_bits_ == 0 ? 1 : (std::size_t{1} << shard_bits_);
+  }
+
+  std::size_t bucket_index(const KeyType& key) const {
+    if (shard_bits_ == 0) {
+      return 0;
+    }
+    if constexpr (std::is_integral<KeyType>::value) {
+      uint64_t mixed = static_cast<uint64_t>(key) * 11400714819323198485ull;
+      return static_cast<std::size_t>(mixed >> (64 - shard_bits_));
+    }
+    return std::hash<KeyType>{}(key) & (shard_count() - 1);
+  }
+
+  mutable LIPP<KeyType, uint64_t> lipp_;
+  mutable HybridPGMLIPPDirectLippSpecialized<KeyType> direct_lipp_{std::vector<int>()};
+  mutable std::vector<BufferIndex> shards_;
+  Mode mode_ = Mode::kLookupHeavyDirect;
+  std::size_t shard_bits_ = 0;
 };
 
 template <class KeyType, std::size_t ShadowShardBits>

@@ -69,3 +69,12 @@ void benchmark_64_hybrid_pgm_lipp_auto_switch_write_through_specialized(
     tli::Benchmark<uint64_t>& benchmark);
 
 void benchmark_64_hybrid_pgm_lipp_write_through_specialized(tli::Benchmark<uint64_t>& benchmark);
+
+void benchmark_64_hybrid_pgm_lipp_workload_aware_specialized(
+    tli::Benchmark<uint64_t>& benchmark, const std::string& filename);
+
+void benchmark_64_hybrid_pgm_lipp_concurrent_workload_aware_specialized(
+    tli::Benchmark<uint64_t>& benchmark, const std::string& filename);
+
+void benchmark_64_hybrid_pgm_lipp_concurrent_workload_aware_specialized_params(
+    tli::Benchmark<uint64_t>& benchmark, const std::vector<int>& params);

@@ -15,6 +15,9 @@ rmi.tar.zst
 benchmark_results_*
 fb*.csv
 results/
+jobs/logs/
+__pycache__/
+*.pyc
 
 # analysis_results/
 *.png
