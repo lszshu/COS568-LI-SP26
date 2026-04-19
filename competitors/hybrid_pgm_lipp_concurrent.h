@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -152,6 +153,9 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
           continue;
         }
         const auto& shard = *per_thread_shards[shard_id];
+        if (shard.count.load(std::memory_order_acquire) == 0) {
+          continue;
+        }
         std::shared_lock<std::shared_mutex> guard(shard.mutex);
         auto it = shard.index.find(lookup_key);
         if (it != shard.index.end()) {
@@ -229,6 +233,9 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
              shard_id <= upper_shard && shard_id < per_thread_shards.size();
              ++shard_id) {
           const auto& shard = *per_thread_shards[shard_id];
+          if (shard.count.load(std::memory_order_acquire) == 0) {
+            continue;
+          }
           std::shared_lock<std::shared_mutex> guard(shard.mutex);
           auto it = shard.index.lower_bound(lower_key);
           while (it != shard.index.end() && it->key() <= upper_key) {
@@ -276,6 +283,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
       {
         std::unique_lock<std::shared_mutex> guard(shard.mutex);
         shard.index.insert(data.key, data.value);
+        shard.count.fetch_add(1, std::memory_order_release);
       }
       delta_filter_add(shard_id, data.key);
       return;
@@ -379,6 +387,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
   struct LocalBufferShard {
     mutable std::shared_mutex mutex;
     BufferIndex index;
+    std::atomic<std::size_t> count{0};
   };
   static constexpr std::size_t kGlobalFilterBits = std::size_t{1} << 22;
   static constexpr std::size_t kShardedFilterBits = std::size_t{1} << 18;

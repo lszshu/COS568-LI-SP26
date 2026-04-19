@@ -2415,3 +2415,491 @@ but rather:
 - the fastest **unstable** upper bound:
   tuned `256-shard` no-flush hybrid, which I would mention only as an
   experimental upper bound and not as the final submission result
+
+### Concurrent LocalPGM follow-up submitted: `7155813`
+
+Date submitted: `2026-04-19`
+
+After the single-thread write-up had effectively converged, I continued the
+Milestone 3 exploration on the separate multithreaded path. The motivation was
+simple:
+
+- the current best insert-heavy concurrent branch was `delta-dpgm-sbf`
+- that path still funnels each thread through a pending-buffer flush into
+  shared shard-local `DPGM`s
+- the code already contained a `local-dpgm-sbf` mode, but I had never given it
+  a proper insert-heavy sweep
+
+So the new hypothesis is:
+
+- for the `8`-thread insert-heavy mixed workload, fully thread-local mutable
+  `DPGM` shards may reduce insert-side coordination enough to beat the current
+  pending-buffer `delta-dpgm-sbf` branch
+
+I made two code changes for this follow-up:
+
+1. `benchmarks/benchmark_hybrid_pgm_lipp_specialized.cc`
+   The insert-heavy concurrent sweep now includes:
+   - stronger `delta-dpgm-sbf` carry-over candidates, including
+     `pending_flush_threshold = 1024` on the non-`osmc` path
+   - explicit `local-dpgm-sbf` candidates with shard bits `4`, `6`, and `8`
+
+2. `competitors/hybrid_pgm_lipp_concurrent.h`
+   I added a lightweight occupancy counter per thread-local shard so
+   `local-dpgm-sbf` lookups and range scans can skip empty local shards without
+   taking unnecessary shared locks.
+
+I also isolated the follow-up with new submission helpers:
+
+- job script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_multithread_local_array.slurm`
+- submit helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/submit_milestone3_multithread_local.sh`
+- analyze helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_local.sh`
+
+The run root for this follow-up is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_local/7155813`
+
+The Slurm validation and submission sequence was:
+
+- `sbatch --test-only ... jobs/run_milestone3_multithread_local_array.slurm`
+  -> validation job id `7155812`
+- actual submit:
+  `./scripts/submit_milestone3_multithread_local.sh 8 0-5`
+  -> batch job id `7155813`
+
+So this branch is now queued entirely through Slurm rather than through any
+login-node benchmark run. The next step, once `7155813` finishes, is to run:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_local.sh 7155813 8`
+
+and then compare the best `local-dpgm-sbf` row against the current best
+`delta-dpgm-sbf` insert-heavy results from the earlier multithread fast runs.
+
+### Concurrent LocalPGM follow-up results: `7155813`
+
+The run finished cleanly and produced a clear outcome:
+
+- `local-dpgm-sbf` did **not** beat the tuned `delta-dpgm-sbf` insert-heavy
+  branch on any dataset
+- the most useful signal from the run was instead that larger pending flush
+  thresholds on `delta-dpgm-sbf` helped a lot on `fb` and `books`
+
+The best multithread rows selected by the analysis were:
+
+- lookup-heavy:
+  - `fb`: `delta-lipp:6`, `16.2691` Mops/s
+  - `books`: `delta-lipp:8`, `7.58856` Mops/s
+  - `osmc`: `delta-lipp:4`, `10.8843` Mops/s
+- insert-heavy:
+  - `fb`: `delta-dpgm-sbf:8:BinarySearch-e128:1024`, `54.0844` Mops/s
+  - `books`: `delta-dpgm-sbf:8:BinarySearch-e128:1024`, `55.9095` Mops/s
+  - `osmc`: `delta-dpgm-sbf:6:BinarySearch-e128:256`, `14.1830` Mops/s
+
+Relative to single-thread `LIPP`, the insert-heavy multithread branch improved
+throughput by:
+
+- `fb`: `+51.8181` Mops/s
+- `books`: `+53.2197` Mops/s
+- `osmc`: `+12.5898` Mops/s
+
+The practical takeaway was:
+
+- for `fb` and `books`, raising the pending flush threshold from the earlier
+  `512` range to `1024` was a major win
+- for `osmc`, the best point was still a smaller `6`-shard configuration with
+  threshold `256`
+- `local-dpgm-sbf` remained materially behind the best shared-shard
+  `delta-dpgm-sbf` path, so it was not worth another broad sweep
+
+That naturally suggested the next follow-up:
+
+- keep only the insert-heavy multithread path
+- drop the weak lookup-heavy / `local-dpgm-sbf` exploration from the new Slurm
+  run
+- expand the `delta-dpgm-sbf` threshold sweep upward on `fb` and `books`
+  (`2048`, `4096`)
+- extend the `osmc` `6`-shard line to larger thresholds (`512`, `1024`) to see
+  whether its best point also shifts upward once the search is focused
+
+### Concurrent insert-heavy threshold follow-up submitted: `7157031`
+
+Date submitted: `2026-04-19`
+
+I encoded that next step directly in
+`benchmarks/benchmark_hybrid_pgm_lipp_specialized.cc`:
+
+- `fb` / `books` insert-heavy concurrent sweep now focuses on:
+  - shard bits `8` with thresholds `256`, `512`, `1024`, `2048`, `4096`
+  - shard bits `6` with thresholds `512`, `1024`
+- `osmc` insert-heavy concurrent sweep now focuses on:
+  - shard bits `6` with thresholds `128`, `256`, `512`, `1024`
+  - shard bits `8` with thresholds `128`, `256`
+
+I isolated that follow-up in a new insert-heavy-only Slurm path:
+
+- job script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_multithread_insert_array.slurm`
+- submit helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/submit_milestone3_multithread_insert.sh`
+- analyze helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert.sh`
+
+The run root is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert/7157031`
+
+The validation and submission sequence was:
+
+- `sbatch --test-only ... jobs/run_milestone3_multithread_insert_array.slurm`
+  -> validation job id `7157032`
+- actual submit:
+  `./scripts/submit_milestone3_multithread_insert.sh 8 0-2`
+  -> batch job id `7157031`
+
+As before, this keeps the whole follow-up on Slurm rather than on the login
+node. Once `7157031` finishes, the immediate next command is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert.sh 7157031 8`
+
+### Concurrent insert-heavy threshold follow-up results: `7157031`
+
+This run sharpened the insert-heavy concurrent picture substantially.
+
+The best rows selected by the final analysis were:
+
+- `fb`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  with `51.6172` Mops/s average throughput
+- `books`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:4096`
+  with `54.1843` Mops/s average throughput
+- `osmc`:
+  `delta-dpgm-sbf:6:BinarySearch-e128:256`
+  with `22.3459` Mops/s average throughput
+
+Relative to single-thread `LIPP`, these improved throughput by:
+
+- `fb`: `+49.3928` Mops/s
+- `books`: `+51.3144` Mops/s
+- `osmc`: `+20.7513` Mops/s
+
+The design conclusions from `7157031` were:
+
+1. `delta-dpgm-sbf` remains the only serious concurrent insert-heavy branch.
+   The `local-dpgm-sbf` alternatives stayed clearly behind.
+2. `fb` still prefers the smaller of the large thresholds, i.e. `1024`.
+3. `books` benefits from pushing the pending flush threshold higher, with
+   `4096` edging out `1024`/`2048`.
+4. `osmc` improved a lot compared with the previous run, but its best point
+   still stayed at the smaller `6`-shard, threshold-`256` configuration.
+
+That meant the flush-threshold axis was now mostly understood:
+
+- there is no single best threshold for all datasets
+- the remaining obvious unexplored axis is the `DPGM` error bound used inside
+  the concurrent `delta-dpgm-sbf` branch
+
+### Concurrent insert-heavy epsilon follow-up submitted: `7158442`
+
+Date submitted: `2026-04-19`
+
+The next hypothesis is therefore:
+
+- the best insert-heavy concurrent branch may still improve if I tune the
+  `DynamicPGM` error bound (`epsilon`) together with the strongest threshold
+  settings from `7157031`
+
+I encoded that follow-up by extending the insert-heavy concurrent benchmark
+wrapper:
+
+- for `fb` / `books`, I added:
+  - `epsilon = 256` at thresholds `1024` and `4096`
+  - `epsilon = 512` at thresholds `1024` and `4096`
+- for `osmc`, I added:
+  - `epsilon = 256` at thresholds `256` and `512`
+  - `epsilon = 512` at threshold `256`
+
+The new isolated Slurm path is:
+
+- job script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_multithread_insert_error_array.slurm`
+- submit helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/submit_milestone3_multithread_insert_error.sh`
+- analyze helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_error.sh`
+
+The run root is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert_error/7158442`
+
+Validation and submission sequence:
+
+- `sbatch --test-only ... jobs/run_milestone3_multithread_insert_error_array.slurm`
+  -> validation job id `7158441`
+- actual submit:
+  `./scripts/submit_milestone3_multithread_insert_error.sh 8 0-2`
+  -> batch job id `7158442`
+
+Once this run finishes, the next command is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_error.sh 7158442 8`
+
+### Concurrent insert-heavy epsilon follow-up results: `7158442`
+
+The `epsilon` follow-up did **not** produce a clean new tuning result. All
+three array tasks failed with exit code `139`:
+
+- `7158442_0` (`fb`) -> `FAILED`, `00:04:07`, `139:0`
+- `7158442_1` (`books`) -> `FAILED`, `00:04:04`, `139:0`
+- `7158442_2` (`osmc`) -> `FAILED`, `00:13:58`, `139:0`
+
+The error logs all terminated with the same benchmark wrapper segfault:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/logs/cos568_m3mt_eps-7158442_0.err`
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/logs/cos568_m3mt_eps-7158442_1.err`
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/logs/cos568_m3mt_eps-7158442_2.err`
+
+Each log ended at:
+
+- `scripts/run_benchmarks_milestone3_multithread_fast_workload.sh: line 93`
+- `Segmentation fault (core dumped)`
+
+The important nuance is that the run did write partial CSV output before
+crashing:
+
+- `fb` and `books` only completed the baseline `BinarySearch-e128` rows before
+  failing
+- `osmc` progressed further and wrote a few `BinarySearch-e256` /
+  `BinarySearch-e512` rows before failing later in the candidate list
+
+The final analysis therefore reflects a mix of complete and partial evidence:
+
+- `fb`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  at `44.7748` Mops/s average
+- `books`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  at `33.1696` Mops/s average
+- `osmc`:
+  `delta-dpgm-sbf:6:BinarySearch-e512:256`
+  at `32.5899` Mops/s average
+
+I do **not** treat the `osmc` `e512` point as a promotable winner, because the
+same sweep crashed on all datasets and therefore failed the stability bar for a
+reportable configuration.
+
+The design conclusion from `7158442` is therefore negative but useful:
+
+- the concurrent insert-heavy `epsilon` axis is not robust enough to justify
+  further broad tuning
+- the next follow-up should stay on the already stable `epsilon=128` line and
+  probe a safer axis instead
+
+That safer axis is the search policy inside the mutable `DynamicPGM` buffer.
+
+### Concurrent insert-heavy search-class follow-up submitted: `7158715`
+
+Date submitted: `2026-04-19`
+
+After the `epsilon` sweep proved unstable, I narrowed the next experiment to a
+strictly more conservative question:
+
+- can the strongest stable concurrent insert-heavy configurations improve by
+  switching the `DynamicPGM` buffer from `BinarySearch` to
+  `InterpolationSearch`, while keeping `epsilon=128`
+
+I rewired the concurrent insert-heavy benchmark wrapper accordingly:
+
+- removed the unstable `BinarySearch-e256` / `BinarySearch-e512` expansions
+- added `InterpolationSearch-e128` only on the strongest stable threshold
+  points from `7157031`
+
+The candidate set is now:
+
+- for `fb` / `books`:
+  - `delta-dpgm-sbf:8:BinarySearch-e128:{256,512,1024,2048,4096}`
+  - `delta-dpgm-sbf:6:BinarySearch-e128:{512,1024}`
+  - `delta-dpgm-sbf:8:InterpolationSearch-e128:{1024,4096}`
+- for `osmc`:
+  - `delta-dpgm-sbf:6:BinarySearch-e128:{128,256,512,1024}`
+  - `delta-dpgm-sbf:8:BinarySearch-e128:{128,256}`
+  - `delta-dpgm-sbf:6:InterpolationSearch-e128:{256,512}`
+
+This keeps the run on stable structural ground:
+
+- same concurrent `delta-dpgm-sbf` branch
+- same `epsilon=128`
+- only one small search-class comparison on the strongest thresholds
+
+The new isolated Slurm path is:
+
+- job script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_multithread_insert_search_array.slurm`
+- submit helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/submit_milestone3_multithread_insert_search.sh`
+- analyze helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_search.sh`
+
+The run root is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert_search/7158715`
+
+Validation and submission sequence:
+
+- `sbatch --test-only ... jobs/run_milestone3_multithread_insert_search_array.slurm`
+  -> validation job id `7158714`
+- actual submit:
+  `./scripts/submit_milestone3_multithread_insert_search.sh 8 0-2`
+  -> batch job id `7158715`
+
+Once this run finishes, the next command is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_search.sh 7158715 8`
+
+### Concurrent insert-heavy search-class follow-up results: `7158715`
+
+This run produced a mixed outcome rather than a clean new winner:
+
+- `books` completed successfully
+- `fb` failed with exit code `139` after partial output
+- `osmc` failed with exit code `139` after partial output
+
+The Slurm status summary was:
+
+- `7158715_0` (`fb`) -> `FAILED`, `00:04:26`, `139:0`
+- `7158715_1` (`books`) -> `COMPLETED`, `00:07:51`, `0:0`
+- `7158715_2` (`osmc`) -> `FAILED`, `00:07:14`, `139:0`
+
+The useful positive result is that `books` completed the full shortlist and
+showed that the insert-heavy concurrent branch is still strongest on
+`delta-dpgm-sbf` with large thresholds:
+
+- `books` best row by average:
+  `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+  at `58.2339` Mops/s
+- `books` `InterpolationSearch-e128` rows did run to completion, but they did
+  not clearly beat the strongest `BinarySearch-e128` point
+
+The run also gave partial but still informative rows before the crashes:
+
+- `fb` best completed row:
+  `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+  at `27.5661` Mops/s average
+- `osmc` best completed row:
+  `delta-dpgm-sbf:6:BinarySearch-e128:1024`
+  at `44.4778` Mops/s average
+
+The main lesson from `7158715` is therefore not that `InterpolationSearch`
+won, but that broad concurrent candidate sets are still too fragile on
+`fb` / `osmc` once the run continues past the strongest stable binary points.
+
+That suggests a stricter next move:
+
+- stop broad sweeps entirely
+- keep only the strongest stable `BinarySearch-e128` finalists
+- choose those finalists per dataset so each array task only runs a very short
+  candidate list
+
+### Concurrent insert-heavy finalists follow-up submitted: `7158956`
+
+Date submitted: `2026-04-19`
+
+I encoded that stricter follow-up by shrinking the concurrent insert-heavy
+wrapper to dataset-specific finalists only:
+
+- `fb`:
+  - `delta-dpgm-sbf:8:BinarySearch-e128:512`
+  - `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  - `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+- `books`:
+  - `delta-dpgm-sbf:8:BinarySearch-e128:1024`
+  - `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+  - `delta-dpgm-sbf:8:BinarySearch-e128:4096`
+- `osmc`:
+  - `delta-dpgm-sbf:6:BinarySearch-e128:256`
+  - `delta-dpgm-sbf:6:BinarySearch-e128:512`
+  - `delta-dpgm-sbf:6:BinarySearch-e128:1024`
+
+This new run deliberately removes:
+
+- `InterpolationSearch`
+- `local-dpgm-sbf`
+- `osmc` `8`-shard controls
+- any long tail of extra concurrent candidates
+
+The new isolated Slurm path is:
+
+- job script:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/jobs/run_milestone3_multithread_insert_finalists_array.slurm`
+- submit helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/submit_milestone3_multithread_insert_finalists.sh`
+- analyze helper:
+  `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_finalists.sh`
+
+The run root is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26-runs/milestone3_multithread_insert_finalists/7158956`
+
+Validation and submission sequence:
+
+- `sbatch --test-only ... jobs/run_milestone3_multithread_insert_finalists_array.slurm`
+  -> validation job id `7158955`
+- actual submit:
+  `./scripts/submit_milestone3_multithread_insert_finalists.sh 8 0-2`
+  -> batch job id `7158956`
+
+Once this run finishes, the next command is:
+
+- `/scratch/gpfs/MENGDIW/shuzhen/COS568-LI-SP26/scripts/analyze_milestone3_multithread_insert_finalists.sh 7158956 8`
+
+### Concurrent insert-heavy finalists follow-up results: `7158956`
+
+This run is the first recent concurrent insert-heavy follow-up that completed
+cleanly on all three datasets:
+
+- `7158956_0` (`fb`) -> `COMPLETED`, `00:03:21`, `0:0`
+- `7158956_1` (`books`) -> `COMPLETED`, `00:03:34`, `0:0`
+- `7158956_2` (`osmc`) -> `COMPLETED`, `00:05:27`, `0:0`
+
+No `.err` log contained a segfault, so the finalists restriction successfully
+removed the instability seen in `7158442` and `7158715`.
+
+Using the existing analysis rule from
+`scripts/analysis_milestone3_multithread_fast.py`
+(`median_mops` first, `avg_mops` second), the winning rows were:
+
+- `fb`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+  with `54.1582` Mops/s average and `54.9177` Mops/s median
+- `books`:
+  `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+  with `55.0181` Mops/s average and `56.8286` Mops/s median
+- `osmc`:
+  `delta-dpgm-sbf:6:BinarySearch-e128:1024`
+  with `44.7732` Mops/s average and `44.9833` Mops/s median
+
+Relative to single-thread `LIPP`, these stable multithread finalists improved
+throughput by:
+
+- `fb`: `+52.0882` Mops/s
+- `books`: `+52.1900` Mops/s
+- `osmc`: `+42.8064` Mops/s
+
+The practical design conclusion is now much cleaner:
+
+1. the strongest stable concurrent insert-heavy family is still
+   `delta-dpgm-sbf`
+2. the instability was not inherent to concurrent insert-heavy operation as a
+   whole, but to letting each run walk too far into fragile extra candidates
+3. the stable finalists are dataset-specific but simple:
+   - `fb` / `books`: `8` shards with large thresholds, especially `2048`
+   - `osmc`: `6` shards with threshold `1024`
+
+At this point the concurrent insert-heavy path has a clean reportable answer:
+
+- `fb`: `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+- `books`: `delta-dpgm-sbf:8:BinarySearch-e128:2048`
+- `osmc`: `delta-dpgm-sbf:6:BinarySearch-e128:1024`
