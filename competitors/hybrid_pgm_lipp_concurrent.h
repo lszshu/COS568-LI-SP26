@@ -23,10 +23,15 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
         mode_ = Mode::kDeltaPGM;
       } else if (params[0] == 2) {
         mode_ = Mode::kDirectLIPP;
+      } else if (params[0] == 3) {
+        mode_ = Mode::kLocalPGM;
       }
     }
     if (params.size() > 1 && params[1] > 0) {
       shard_bits_ = static_cast<std::size_t>(params[1]);
+    }
+    if (params.size() > 2 && params[2] > 0) {
+      pending_flush_threshold_ = static_cast<std::size_t>(params[2]);
     }
   }
 
@@ -43,21 +48,38 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     shard_upper_bounds_.clear();
     delta_lipp_shards_.clear();
     dpgm_shards_.clear();
+    local_dpgm_shards_.clear();
     pending_dpgm_buffers_.clear();
     shard_mutexes_.clear();
-    if (mode_ == Mode::kDirectLIPP) {
-      delta_filter_.reset();
-    } else {
-      delta_filter_.reset(new uint64_t[filter_word_count()]);
-      std::fill_n(delta_filter_.get(), filter_word_count(), 0ull);
-    }
+    delta_filter_.reset();
+    delta_filters_.clear();
 
     const std::size_t shard_cnt =
         std::min<std::size_t>(shard_count(), loading_data.size());
     if (mode_ == Mode::kDeltaLIPP) {
+      delta_filter_.reset(new uint64_t[global_filter_word_count()]);
+      std::fill_n(delta_filter_.get(), global_filter_word_count(), 0ull);
+    } else if (mode_ != Mode::kDirectLIPP) {
+      delta_filters_.resize(shard_cnt);
+      for (std::size_t shard_id = 0; shard_id < shard_cnt; ++shard_id) {
+        delta_filters_[shard_id].reset(new uint64_t[sharded_filter_word_count()]);
+        std::fill_n(delta_filters_[shard_id].get(), sharded_filter_word_count(),
+                    0ull);
+      }
+    }
+    if (mode_ == Mode::kDeltaLIPP) {
       delta_lipp_shards_.resize(shard_cnt);
     } else if (mode_ == Mode::kDeltaPGM) {
       dpgm_shards_.resize(shard_cnt);
+    } else if (mode_ == Mode::kLocalPGM && thread_count_ > 0) {
+      local_dpgm_shards_.resize(thread_count_);
+      for (std::size_t thread_id = 0; thread_id < thread_count_; ++thread_id) {
+        local_dpgm_shards_[thread_id].reserve(shard_cnt);
+        for (std::size_t shard_id = 0; shard_id < shard_cnt; ++shard_id) {
+          local_dpgm_shards_[thread_id].push_back(
+              std::make_unique<LocalBufferShard>());
+        }
+      }
     }
     shard_mutexes_.reserve(shard_cnt);
     main_lipp_shards_.reserve(shard_cnt);
@@ -71,7 +93,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
         pending_dpgm_buffers_[thread_id].reserve(shard_cnt);
         for (std::size_t shard_id = 0; shard_id < shard_cnt; ++shard_id) {
           auto pending = std::make_unique<PendingBuffer>();
-          pending->entries.reserve(kPendingFlushThreshold);
+          pending->entries.reserve(pending_flush_threshold_);
           pending_dpgm_buffers_[thread_id].push_back(std::move(pending));
         }
       }
@@ -111,7 +133,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     if (main_lipp_shards_[shard_id]->find(lookup_key, value)) {
       return value;
     }
-    if (!delta_filter_may_contain(lookup_key)) {
+    if (!delta_filter_may_contain(shard_id, lookup_key)) {
       return util::OVERFLOW;
     }
 
@@ -120,6 +142,21 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
       const auto& shard = delta_lipp_shards_[shard_id];
       if (shard && shard->find(lookup_key, value)) {
         return value;
+      }
+      return util::OVERFLOW;
+    }
+
+    if (mode_ == Mode::kLocalPGM) {
+      for (const auto& per_thread_shards : local_dpgm_shards_) {
+        if (shard_id >= per_thread_shards.size()) {
+          continue;
+        }
+        const auto& shard = *per_thread_shards[shard_id];
+        std::shared_lock<std::shared_mutex> guard(shard.mutex);
+        auto it = shard.index.find(lookup_key);
+        if (it != shard.index.end()) {
+          return it->value();
+        }
       }
       return util::OVERFLOW;
     }
@@ -183,6 +220,26 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
       return result;
     }
 
+    if (mode_ == Mode::kLocalPGM) {
+      for (const auto& per_thread_shards : local_dpgm_shards_) {
+        if (lower_shard >= per_thread_shards.size()) {
+          continue;
+        }
+        for (std::size_t shard_id = lower_shard;
+             shard_id <= upper_shard && shard_id < per_thread_shards.size();
+             ++shard_id) {
+          const auto& shard = *per_thread_shards[shard_id];
+          std::shared_lock<std::shared_mutex> guard(shard.mutex);
+          auto it = shard.index.lower_bound(lower_key);
+          while (it != shard.index.end() && it->key() <= upper_key) {
+            result += it->value();
+            ++it;
+          }
+        }
+      }
+      return result;
+    }
+
     for (std::size_t shard_id = 0; shard_id < dpgm_shards_.size(); ++shard_id) {
       accumulate_pending_range(shard_id, lower_key, upper_key, result);
       std::shared_lock<std::shared_mutex> guard(*shard_mutexes_[shard_id]);
@@ -209,18 +266,30 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
         delta_lipp_shards_[shard_id] = std::make_unique<DeltaLIPP>();
       }
       delta_lipp_shards_[shard_id]->insert(data.key, data.value);
-      delta_filter_add(data.key);
+      delta_filter_add(shard_id, data.key);
       return;
     }
+
+    if (mode_ == Mode::kLocalPGM && !local_dpgm_shards_.empty()) {
+      const auto local_thread_id = thread_id % local_dpgm_shards_.size();
+      auto& shard = *local_dpgm_shards_[local_thread_id][shard_id];
+      {
+        std::unique_lock<std::shared_mutex> guard(shard.mutex);
+        shard.index.insert(data.key, data.value);
+      }
+      delta_filter_add(shard_id, data.key);
+      return;
+    }
+
     if (thread_id < pending_dpgm_buffers_.size()) {
       auto& pending = *pending_dpgm_buffers_[thread_id][shard_id];
       bool should_flush = false;
       {
         std::lock_guard<std::mutex> guard(pending.mutex);
         pending.entries.push_back(data);
-        should_flush = pending.entries.size() >= kPendingFlushThreshold;
+        should_flush = pending.entries.size() >= pending_flush_threshold_;
       }
-      delta_filter_add(data.key);
+      delta_filter_add(shard_id, data.key);
       if (should_flush) {
         flush_pending_buffer(thread_id, shard_id);
       }
@@ -229,7 +298,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
 
     std::unique_lock<std::shared_mutex> guard(*shard_mutexes_[shard_id]);
     dpgm_shards_[shard_id].insert(data.key, data.value);
-    delta_filter_add(data.key);
+    delta_filter_add(shard_id, data.key);
   }
 
   bool applicable(bool unique, bool range_query, bool insert, bool multithread,
@@ -249,8 +318,13 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     if (mode_ == Mode::kDeltaLIPP) {
       return {"delta-lipp", std::to_string(shard_bits_)};
     }
-    return {"delta-dpgm", std::to_string(shard_bits_), SearchClass::name(),
-            std::to_string(kDynamicPGMError)};
+    if (mode_ == Mode::kLocalPGM) {
+      return {"local-dpgm-sbf", std::to_string(shard_bits_),
+              SearchClass::name() + "-e" + std::to_string(kDynamicPGMError)};
+    }
+    return {"delta-dpgm-sbf", std::to_string(shard_bits_),
+            SearchClass::name() + "-e" + std::to_string(kDynamicPGMError),
+            std::to_string(pending_flush_threshold_)};
   }
 
   std::size_t size() const {
@@ -261,10 +335,19 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     if (mode_ == Mode::kDirectLIPP) {
       return total;
     }
+    total += delta_filter_bytes();
     if (mode_ == Mode::kDeltaLIPP) {
       for (const auto& shard : delta_lipp_shards_) {
         if (shard) {
           total += shard->index_size();
+        }
+      }
+      return total;
+    }
+    if (mode_ == Mode::kLocalPGM) {
+      for (const auto& per_thread_shards : local_dpgm_shards_) {
+        for (const auto& shard : per_thread_shards) {
+          total += shard->index.size_in_bytes();
         }
       }
       return total;
@@ -282,6 +365,7 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     kDeltaLIPP,
     kDeltaPGM,
     kDirectLIPP,
+    kLocalPGM,
   };
 
   using BufferSearch = SearchClass;
@@ -292,9 +376,14 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     mutable std::mutex mutex;
     std::vector<KeyValue<KeyType>> entries;
   };
-  static constexpr std::size_t kFilterBits = std::size_t{1} << 22;
+  struct LocalBufferShard {
+    mutable std::shared_mutex mutex;
+    BufferIndex index;
+  };
+  static constexpr std::size_t kGlobalFilterBits = std::size_t{1} << 22;
+  static constexpr std::size_t kShardedFilterBits = std::size_t{1} << 18;
   static constexpr std::size_t kFilterHashes = 3;
-  static constexpr std::size_t kPendingFlushThreshold = 64;
+  static constexpr std::size_t kDefaultPendingFlushThreshold = 64;
 
   std::size_t shard_count() const {
     return shard_bits_ == 0 ? 1 : (std::size_t{1} << shard_bits_);
@@ -309,7 +398,11 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     return static_cast<std::size_t>(it - shard_upper_bounds_.begin());
   }
 
-  std::size_t filter_word_count() const { return kFilterBits / 64; }
+  std::size_t global_filter_word_count() const { return kGlobalFilterBits / 64; }
+
+  std::size_t sharded_filter_word_count() const {
+    return kShardedFilterBits / 64;
+  }
 
   static uint64_t mix_key(uint64_t value) {
     value += 0x9e3779b97f4a7c15ull;
@@ -325,28 +418,81 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
     return static_cast<uint64_t>(std::hash<KeyType>{}(key));
   }
 
-  bool delta_filter_may_contain(const KeyType& key) const {
+  std::size_t delta_filter_bytes() const {
+    if (mode_ == Mode::kDeltaLIPP && delta_filter_) {
+      return global_filter_word_count() * sizeof(uint64_t);
+    }
+    return delta_filters_.size() * sharded_filter_word_count() *
+           sizeof(uint64_t);
+  }
+
+  bool delta_filter_may_contain(std::size_t shard_id, const KeyType& key) const {
+    if (mode_ == Mode::kDeltaLIPP) {
+      if (!delta_filter_) {
+        return true;
+      }
+      const uint64_t mixed = mix_key(key_to_u64(key));
+      uint64_t step = mix_key(mixed ^ 0x9e3779b97f4a7c15ull);
+      step |= 1ull;
+      for (std::size_t hash_id = 0; hash_id < kFilterHashes; ++hash_id) {
+        const uint64_t bit_index =
+            (mixed + hash_id * step) & (kGlobalFilterBits - 1);
+        const uint64_t mask = 1ull << (bit_index & 63);
+        if ((__atomic_load_n(&delta_filter_[bit_index >> 6], __ATOMIC_RELAXED) &
+             mask) == 0) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (shard_id >= delta_filters_.size()) {
+      return true;
+    }
+    const uint64_t* filter = delta_filters_[shard_id].get();
     const uint64_t mixed = mix_key(key_to_u64(key));
     uint64_t step = mix_key(mixed ^ 0x9e3779b97f4a7c15ull);
     step |= 1ull;
     for (std::size_t hash_id = 0; hash_id < kFilterHashes; ++hash_id) {
-      const uint64_t bit_index = (mixed + hash_id * step) & (kFilterBits - 1);
+      const uint64_t bit_index =
+          (mixed + hash_id * step) & (kShardedFilterBits - 1);
       const uint64_t mask = 1ull << (bit_index & 63);
-      if ((__atomic_load_n(&delta_filter_[bit_index >> 6], __ATOMIC_RELAXED) & mask) == 0) {
+      if ((__atomic_load_n(&filter[bit_index >> 6], __ATOMIC_RELAXED) & mask) ==
+          0) {
         return false;
       }
     }
     return true;
   }
 
-  void delta_filter_add(const KeyType& key) {
+  void delta_filter_add(std::size_t shard_id, const KeyType& key) {
+    if (mode_ == Mode::kDeltaLIPP) {
+      if (!delta_filter_) {
+        return;
+      }
+      const uint64_t mixed = mix_key(key_to_u64(key));
+      uint64_t step = mix_key(mixed ^ 0x9e3779b97f4a7c15ull);
+      step |= 1ull;
+      for (std::size_t hash_id = 0; hash_id < kFilterHashes; ++hash_id) {
+        const uint64_t bit_index =
+            (mixed + hash_id * step) & (kGlobalFilterBits - 1);
+        const uint64_t mask = 1ull << (bit_index & 63);
+        __atomic_fetch_or(&delta_filter_[bit_index >> 6], mask,
+                          __ATOMIC_RELAXED);
+      }
+      return;
+    }
+    if (shard_id >= delta_filters_.size()) {
+      return;
+    }
+    uint64_t* filter = delta_filters_[shard_id].get();
     const uint64_t mixed = mix_key(key_to_u64(key));
     uint64_t step = mix_key(mixed ^ 0x9e3779b97f4a7c15ull);
     step |= 1ull;
     for (std::size_t hash_id = 0; hash_id < kFilterHashes; ++hash_id) {
-      const uint64_t bit_index = (mixed + hash_id * step) & (kFilterBits - 1);
+      const uint64_t bit_index =
+          (mixed + hash_id * step) & (kShardedFilterBits - 1);
       const uint64_t mask = 1ull << (bit_index & 63);
-      __atomic_fetch_or(&delta_filter_[bit_index >> 6], mask, __ATOMIC_RELAXED);
+      __atomic_fetch_or(&filter[bit_index >> 6], mask, __ATOMIC_RELAXED);
     }
   }
 
@@ -421,10 +567,13 @@ class HybridPGMLIPPConcurrentWorkloadAware : public Base<KeyType> {
   mutable std::vector<KeyType> shard_upper_bounds_;
   mutable std::vector<std::unique_ptr<DeltaLIPP>> delta_lipp_shards_;
   mutable std::vector<BufferIndex> dpgm_shards_;
+  mutable std::vector<std::vector<std::unique_ptr<LocalBufferShard>>> local_dpgm_shards_;
   mutable std::vector<std::vector<std::unique_ptr<PendingBuffer>>> pending_dpgm_buffers_;
   mutable std::vector<std::unique_ptr<std::shared_mutex>> shard_mutexes_;
   mutable std::unique_ptr<uint64_t[]> delta_filter_;
+  mutable std::vector<std::unique_ptr<uint64_t[]>> delta_filters_;
   Mode mode_ = Mode::kDeltaLIPP;
   std::size_t shard_bits_ = 8;
   std::size_t thread_count_ = 0;
+  std::size_t pending_flush_threshold_ = kDefaultPendingFlushThreshold;
 };

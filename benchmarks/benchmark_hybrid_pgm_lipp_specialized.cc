@@ -273,10 +273,18 @@ void benchmark_64_hybrid_pgm_lipp_concurrent_workload_aware_specialized(
   }
 
   if (filename.find("0.900000i") != std::string::npos) {
-    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 4});
-    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 5});
-    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6});
-    benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8});
+    if (filename.find("osmc_100M_public_uint64") != std::string::npos) {
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6, 64});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6, 128});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6, 256});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8, 128});
+    } else {
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 6, 128});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8, 64});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8, 128});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8, 256});
+      benchmark.template Run<HybridPGMLIPPConcurrentWorkloadAware<uint64_t>>({1, 8, 512});
+    }
     return;
   }
 
